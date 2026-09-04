@@ -231,6 +231,46 @@ function disposeLoaded() {
   loadedTriangles = 0;
 }
 
+function offsetAlongNormals(geometry, distance) {
+  const g = geometry.clone();
+  const p = g.attributes.position;
+  const n = g.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    p.array[i * 3] += n.array[i * 3] * distance;
+    p.array[i * 3 + 1] += n.array[i * 3 + 1] * distance;
+    p.array[i * 3 + 2] += n.array[i * 3 + 2] * distance;
+  }
+  p.needsUpdate = true;
+  g.computeBoundingSphere();
+  return g;
+}
+
+function offsetRadiallyInward(geometry, distance) {
+  const g = geometry.clone();
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.array[i * 3];
+    const z = p.array[i * 3 + 2];
+    const r = Math.hypot(x, z);
+    if (r > 1e-8) {
+      p.array[i * 3] -= (x / r) * distance;
+      p.array[i * 3 + 2] -= (z / r) * distance;
+    }
+  }
+  p.needsUpdate = true;
+  g.computeBoundingSphere();
+  return g;
+}
+
+function offsetUpward(geometry, distance) {
+  const g = geometry.clone();
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) p.array[i * 3 + 1] += distance;
+  p.needsUpdate = true;
+  g.computeBoundingSphere();
+  return g;
+}
+
 function loadCup(clay) {
   disposeLoaded();
   const url = new URL(`models/cup-${clay}.glb`, window.location.href).href;
@@ -238,20 +278,19 @@ function loadCup(clay) {
     url,
     (gltf) => {
       const root = gltf.scene;
+      const byName = {};
+      let bodyMatSource = null;
+      let coatTex = null;
       root.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
+          if (child.name) byName[child.name] = child;
           const mats = Array.isArray(child.material) ? child.material : [child.material];
           for (const m of mats) {
-            // The glazed interior must stay darker than the raw outer clay:
-            // lower its diffuse response and mute the bright top-light/environment
-            // reflections that otherwise blow out the cavity.
-            if (m.name?.startsWith("glaze-")) {
-              m.envMapIntensity = 0.22;
-              m.clearcoat = 0.62;
-              m.roughness = Math.max(m.roughness, 0.18);
-              m.color?.multiplyScalar(0.76);
+            if (m.name?.startsWith("body-")) {
+              bodyMatSource = m;
+              coatTex = m.clearcoatMap || null;
             }
           }
           loadedTriangles += child.geometry.index
@@ -259,6 +298,58 @@ function loadCup(clay) {
             : child.geometry.attributes.position.count / 3;
         }
       });
+
+      const outer = byName["outer-wall"];
+      const inner = byName["inner-wall"];
+      const floor = byName["interior-floor"];
+
+      if (bodyMatSource) {
+        // Remove baked clearcoat: glaze now lives in a real thin shell.
+        bodyMatSource.clearcoat = 0;
+        bodyMatSource.clearcoatMap = null;
+
+        const clayMatte = bodyMatSource.clone();
+        clayMatte.clearcoat = 0;
+        clayMatte.clearcoatMap = null;
+        for (const m of [inner, floor]) {
+          if (m) m.material = clayMatte;
+        }
+
+        const GLASS_TINT = new THREE.Color(0x4b463f);
+        const glassMat = new THREE.MeshPhysicalMaterial({
+          color: GLASS_TINT,
+          transmission: 0.72,
+          thickness: 0.00035,
+          attenuationColor: GLASS_TINT.clone().multiplyScalar(1.15),
+          attenuationDistance: 0.002,
+          roughness: 0.1,
+          ior: 1.45,
+          clearcoat: 1,
+          clearcoatRoughness: 0.08,
+          envMapIntensity: 2.2,
+          transparent: true,
+          side: THREE.DoubleSide,
+        });
+
+        if (outer) {
+          const shellMat = glassMat.clone();
+          shellMat.alphaMap = coatTex || null;
+          shellMat.alphaTest = 0.04;
+          const shell = new THREE.Mesh(offsetAlongNormals(outer.geometry, 0.0003), shellMat);
+          shell.name = "glaze-shell-outer";
+          root.add(shell);
+        }
+        if (inner) {
+          const shell = new THREE.Mesh(offsetRadiallyInward(inner.geometry, 0.0003), glassMat.clone());
+          shell.name = "glaze-shell-inner";
+          root.add(shell);
+        }
+        if (floor) {
+          const shell = new THREE.Mesh(offsetUpward(floor.geometry, 0.0003), glassMat.clone());
+          shell.name = "glaze-shell-floor";
+          root.add(shell);
+        }
+      }
       loadedObject = root;
       cupGroup.add(root);
       console.info(`[render] Blender GLB ${clay} · ${Math.round(loadedTriangles / 1000)}k tris`);
