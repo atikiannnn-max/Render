@@ -43,7 +43,7 @@ MEDALLION_RADIUS = 14.0
 MEDALLION_HEIGHT = 1.8
 
 CLAYS = {
-    "stone": {"name": "Stone", "rgb": (198, 188, 168)},
+    "stone": {"name": "Stone", "rgb": (181, 170, 151)},
     "asphalt": {"name": "Asphalt", "rgb": (52, 53, 54)},
 }
 
@@ -171,10 +171,9 @@ def rand(u, v, seed=0):
 
 def clay_speckle(u, v, clay_rgb):
     r, g, b = clay_rgb
-    grain = pnoise(u, v, 13) * 0.035 + (rand(math.floor(u * 71), math.floor(v * 83), 4) - 0.5) * 0.07
-    speck = rand(math.floor(u * 173), math.floor(v * 149), 7) - 0.5
-    hard = -0.12 if abs(speck) > 0.485 and speck > 0 else (0.08 if abs(speck) > 0.485 else 0)
-    f = min(1.1, max(0.84, 1 + grain + hard))
+    # Delicate, slightly mottled fired clay. No hard pixel speckles.
+    grain = pnoise(u, v, 13) * 0.02 + (rand(math.floor(u * 61), math.floor(v * 47), 4) - 0.5) * 0.025
+    f = min(1.05, max(0.96, 1 + grain))
     return (r * f, g * f, b * f)
 
 
@@ -214,19 +213,11 @@ def build_body_textures(clay_id, out_dir):
         for px in range(TEX_W):
             u = (px + 0.5) / TEX_W
             g = glaze_cover(u, y, H)
-            s = g * g * (3 - 2 * g)
-            if g > 0.03:
-                raw = clay_speckle(u, v, rgb)
-                wet = wet_clay(u, v, rgb)
-                c = (
-                    raw[0] * (1 - s) + wet[0] * s,
-                    raw[1] * (1 - s) + wet[1] * s,
-                    raw[2] * (1 - s) + wet[2] * s,
-                )
-            else:
-                c = clay_speckle(u, v, rgb)
-            raw_rough = 0.91 + pnoise(u, v, 21) * 0.035 + rand(math.floor(u * 97), math.floor(v * 71), 2) * 0.025
-            glass_rough = 0.055 + pnoise(u, v, 37) * 0.025
+            # Same clay everywhere. Glaze is transparent: the relief/body share
+            # one colour; only the clearcoat channel differs.
+            c = clay_speckle(u, v, rgb)
+            raw_rough = 0.78 + pnoise(u, v, 21) * 0.02
+            glass_rough = 0.14 + pnoise(u, v, 37) * 0.02
             rough = raw_rough * (1 - g) + glass_rough * g
             row_color += bytes((clamp255(c[0]), clamp255(c[1]), clamp255(c[2]), 255))
             row_rough += bytes((clamp255(rough * 255),) * 4)
@@ -448,23 +439,16 @@ def body_material(name, tex_dir, clay_id):
     return mat
 
 
-def glaze_material(name, clay_rgb):
-    r, g, b = clay_rgb
-    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-    sat = 1.36
-    wet = (
-        max(0, min(255, (lum + (r - lum) * sat) * 0.7)),
-        max(0, min(255, (lum + (g - lum) * sat) * 0.7)),
-        max(0, min(255, (lum + (b - lum) * sat) * 0.7)),
-    )
+def glaze_material(name, clay_rgb, body_color_path):
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     p = principled(mat)
-    p.inputs["Base Color"].default_value = (wet[0] / 255, wet[1] / 255, wet[2] / 255, 1)
-    p.inputs["Roughness"].default_value = 0.06
+    color = image_node(mat, body_color_path, "sRGB", -600, 300)
+    mat.node_tree.links.new(color.outputs["Color"], p.inputs["Base Color"])
+    p.inputs["Roughness"].default_value = 0.15
     p.inputs["Coat Weight"].default_value = 1.0
-    p.inputs["Coat Roughness"].default_value = 0.05
-    mat.diffuse_color = (wet[0] / 255, wet[1] / 255, wet[2] / 255, 1)
+    p.inputs["Coat Roughness"].default_value = 0.1
+    p.inputs["IOR"].default_value = 1.45
     return mat
 
 
@@ -498,7 +482,11 @@ def main():
     clear_scene()
 
     body_mat = body_material(f"body-{args.clay}", tex_dir, args.clay)
-    glaze_mat = glaze_material(f"glaze-{args.clay}", CLAYS[args.clay]["rgb"])
+    glaze_mat = glaze_material(
+        f"glaze-{args.clay}",
+        CLAYS[args.clay]["rgb"],
+        tex_dir / f"body-color-{args.clay}.png",
+    )
 
     outer = lathe_surface("outer-wall", inner=False)
     outer.data.materials.append(body_mat)

@@ -23,11 +23,10 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = false;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.98;
+renderer.toneMapping = THREE.AgXToneMapping;
+renderer.toneMappingExposure = 1.09;
 stageEl.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -46,81 +45,54 @@ controls.update();
 const pmrem = new THREE.PMREMGenerator(renderer);
 const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
 scene.environment = envTexture;
-scene.environmentIntensity = 0.5;
+scene.environmentIntensity = 0.42;
 pmrem.dispose();
 
 /*
  * Studio lighting, not a single source:
- *  - four large softbox area lights around the product;
- *  - warm/cool separation so surfaces don't go flat;
- *  - one low-intensity directional only to keep a very soft shadow shape.
+ *  - very large key softbox above-left/front, roughly 3x the cup;
+ *  - broad cool fill right/front, 25-40% of key;
+ *  - weak top/back source only to separate the rim from the backdrop.
+ * No directional/point/sun lights. Shadows come from wide radial gradients.
  */
 RectAreaLightUniformsLib.init();
-
-const keyLight = new THREE.DirectionalLight(0xfff2e2, 1.35);
-keyLight.position.set(-270, 260, 120);
-keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(2048, 2048);
-keyLight.shadow.camera.near = 10;
-keyLight.shadow.camera.far = 700;
-keyLight.shadow.camera.left = -180;
-keyLight.shadow.camera.right = 180;
-keyLight.shadow.camera.top = 180;
-keyLight.shadow.camera.bottom = -180;
-keyLight.shadow.bias = -0.0004;
-keyLight.shadow.radius = 9;
-scene.add(keyLight);
-
-const secondaryShadowLight = new THREE.DirectionalLight(0xfff7ec, 0.55);
-secondaryShadowLight.position.set(210, 230, 160);
-secondaryShadowLight.castShadow = true;
-secondaryShadowLight.shadow.mapSize.set(1024, 1024);
-secondaryShadowLight.shadow.camera.near = 10;
-secondaryShadowLight.shadow.camera.far = 700;
-secondaryShadowLight.shadow.camera.left = -140;
-secondaryShadowLight.shadow.camera.right = 140;
-secondaryShadowLight.shadow.camera.top = 140;
-secondaryShadowLight.shadow.camera.bottom = -140;
-secondaryShadowLight.shadow.bias = -0.0005;
-secondaryShadowLight.shadow.radius = 12;
-scene.add(secondaryShadowLight);
 
 const studioLights = [
   {
     color: 0xffedd6,
-    intensity: 2.8,
-    width: 420,
-    height: 340,
+    intensity: 3.1,
+    width: 520,
+    height: 380,
     position: [-300, 330, 170],
     label: "key-softbox",
   },
   {
     color: 0xe8f2ff,
-    intensity: 1.15,
-    width: 360,
-    height: 250,
+    intensity: 0.55,
+    width: 440,
+    height: 300,
     position: [300, 190, 310],
     label: "fill-softbox",
   },
   {
     color: 0xfff6e8,
-    intensity: 1.0,
-    width: 520,
-    height: 180,
+    intensity: 0.55,
+    width: 600,
+    height: 220,
     position: [0, 420, 80],
     label: "overhead-softbox",
   },
   {
     color: 0xe4ecff,
-    intensity: 1.5,
-    width: 360,
-    height: 300,
+    intensity: 0.7,
+    width: 460,
+    height: 340,
     position: [60, 300, -350],
     label: "rim-softbox",
   },
   {
     color: 0xfff4e4,
-    intensity: 0.45,
+    intensity: 0.25,
     width: 280,
     height: 200,
     position: [-280, 110, -220],
@@ -136,9 +108,6 @@ for (const cfg of studioLights) {
   scene.add(light);
 }
 
-const fillLight = new THREE.HemisphereLight(0xf5ead8, 0x4f4840, 0.22);
-scene.add(fillLight);
-
 const cupGroup = new THREE.Group();
 cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
 scene.add(cupGroup);
@@ -151,10 +120,10 @@ function gradientTexture() {
   c.height = 256;
   const ctx = c.getContext("2d");
   const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, "#6e6c67");
-  grad.addColorStop(0.45, "#6c6a64");
-  grad.addColorStop(0.9, "#5f5c57");
-  grad.addColorStop(1, "#55534f");
+  grad.addColorStop(0, "#7e7c78");
+  grad.addColorStop(0.45, "#7b7975");
+  grad.addColorStop(0.9, "#6c6a66");
+  grad.addColorStop(1, "#615f5c");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 16, 256);
   const t = new THREE.CanvasTexture(c);
@@ -173,11 +142,11 @@ scene.add(backdrop);
 const studioFloor = new THREE.Mesh(
   new THREE.CircleGeometry(2200, 96).rotateX(-Math.PI / 2),
   new THREE.MeshPhysicalMaterial({
-    color: 0x474643,
-    roughness: 0.88,
+    color: 0x5d5b57,
+    roughness: 0.92,
     metalness: 0,
     clearcoat: 0,
-    envMapIntensity: 0.05,
+    envMapIntensity: 0.08,
   })
 );
 studioFloor.position.y = -0.12;
@@ -216,9 +185,9 @@ function addShadowBlob(x, z, sx, sz, opacity) {
   scene.add(mesh);
 }
 
-addShadowBlob(0, 0, 130, 130, 0.6);
-addShadowBlob(58, 26, 185, 135, 0.4);
-addShadowBlob(-70, -30, 250, 170, 0.24);
+addShadowBlob(0, 0, 145, 145, 0.5);
+addShadowBlob(72, 34, 220, 155, 0.3);
+addShadowBlob(-90, -40, 290, 190, 0.2);
 
 /* ---------------- GLB loading ---------------- */
 
