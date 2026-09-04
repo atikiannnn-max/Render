@@ -57,7 +57,7 @@ pmrem.dispose();
  */
 RectAreaLightUniformsLib.init();
 
-const keyLight = new THREE.DirectionalLight(0xfff2e2, 0.85);
+const keyLight = new THREE.DirectionalLight(0xfff2e2, 1.5);
 keyLight.position.set(-260, 240, -210);
 keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(2048, 2048);
@@ -70,6 +70,20 @@ keyLight.shadow.camera.bottom = -180;
 keyLight.shadow.bias = -0.0004;
 keyLight.shadow.radius = 9;
 scene.add(keyLight);
+
+const secondaryShadowLight = new THREE.DirectionalLight(0xfff7ec, 0.62);
+secondaryShadowLight.position.set(190, 260, 230);
+secondaryShadowLight.castShadow = true;
+secondaryShadowLight.shadow.mapSize.set(1024, 1024);
+secondaryShadowLight.shadow.camera.near = 10;
+secondaryShadowLight.shadow.camera.far = 700;
+secondaryShadowLight.shadow.camera.left = -140;
+secondaryShadowLight.shadow.camera.right = 140;
+secondaryShadowLight.shadow.camera.top = 140;
+secondaryShadowLight.shadow.camera.bottom = -140;
+secondaryShadowLight.shadow.bias = -0.0005;
+secondaryShadowLight.shadow.radius = 12;
+scene.add(secondaryShadowLight);
 
 const studioLights = [
   {
@@ -202,9 +216,9 @@ function addShadowBlob(x, z, sx, sz, opacity) {
   scene.add(mesh);
 }
 
-addShadowBlob(0, 0, 92, 92, 0.4);
-addShadowBlob(30, 19, 125, 92, 0.24);
-addShadowBlob(-36, -10, 175, 120, 0.14);
+addShadowBlob(0, 0, 118, 118, 0.48);
+addShadowBlob(42, 26, 165, 118, 0.3);
+addShadowBlob(-58, -16, 235, 155, 0.18);
 
 /* ---------------- GLB loading ---------------- */
 
