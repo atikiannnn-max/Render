@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Render — 3D-printed ceramic cup</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23b6a185'/%3E%3Cpath d='M8 18c0-7 4-10 8-10s8 3 8 10' fill='%23214190'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #26211a;
+        --muted: #7b7164;
+        --line: rgba(38, 33, 26, 0.13);
+        --glass: rgba(255, 252, 246, 0.78);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        color: var(--ink);
+        overflow: hidden;
+        background:
+          radial-gradient(120% 90% at 50% 0%, #fbf6ec 0%, #f1e9da 48%, #d9cdbb 100%);
+      }
+      #stage { position: fixed; inset: 0; }
+      canvas { display: block; }
+
+      .ui-frame { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+      .vignette {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(85% 70% at 50% 42%, transparent 58%, rgba(46, 36, 24, 0.12) 100%);
+      }
+      .brand {
+        position: absolute;
+        top: 22px;
+        left: 26px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        user-select: none;
+      }
+      .brand .dot {
+        width: 9px; height: 9px; border-radius: 50%;
+        background: linear-gradient(145deg, #d3c9b8, #a7967e);
+        box-shadow: inset 0 -1px 1px rgba(0,0,0,.18);
+      }
+      .brand b { font-weight: 600; letter-spacing: .02em; }
+      .brand small { color: var(--muted); margin-left: 2px; }
+
+      .hint {
+        position: absolute;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: rgba(38, 33, 26, 0.55);
+        font-size: 12.5px;
+        background: var(--glass);
+        border: 1px solid var(--line);
+        padding: 8px 14px;
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        user-select: none;
+        white-space: nowrap;
+      }
+
+      .panel {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 272px;
+        max-height: calc(100vh - 40px);
+        overflow: auto;
+        pointer-events: auto;
+        background: var(--glass);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px 16px 10px;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 18px 46px rgba(45, 34, 20, 0.13);
+      }
+      .panel h2 {
+        margin: 0 0 3px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .panel .sub { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+      .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin-bottom: 13px; }
+      .swatch {
+        pointer-events: auto;
+        appearance: none;
+        height: 31px;
+        border-radius: 10px;
+        border: 1.5px solid rgba(38,33,26,0.16);
+        cursor: pointer;
+        background-size: cover;
+        transition: transform .12s ease, box-shadow .12s ease;
+      }
+      .swatch:hover { transform: translateY(-1px); }
+      .swatch.active {
+        box-shadow: 0 0 0 2px #fff, 0 0 0 4.5px #57422c;
+        border-color: transparent;
+      }
+      .field { margin-bottom: 10px; }
+      .field .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 4px;
+      }
+      .field label { font-size: 12px; color: #4a4134; }
+      .field output { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      input[type="range"] {
+        width: 100%;
+        accent-color: #75583a;
+        height: 4px;
+      }
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        background: rgba(255,255,255,.45);
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        padding: 3px;
+      }
+      .segmented button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: #6b5f4f;
+        font: inherit;
+        font-size: 12px;
+        padding: 6px 0;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .segmented button.active { background: #fffdf8; color: var(--ink); box-shadow: 0 1px 5px rgba(0,0,0,.1); }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+        margin: 12px 0 4px;
+      }
+      .actions button {
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(255,253,248,.75);
+        color: #4c4235;
+        cursor: pointer;
+        transition: background .12s ease, transform .08s ease;
+      }
+      .actions button:hover { background: #fffdf8; }
+      .actions button:active { transform: scale(.97); }
+      .actions button.primary {
+        grid-column: 1 / -1;
+        background: #3c3328;
+        border-color: #3c3328;
+        color: #f6efe2;
+      }
+      .actions button.primary:hover { background: #544737; }
+      .fps {
+        position: absolute;
+        right: 22px;
+        bottom: 22px;
+        font-size: 11px;
+        color: rgba(38,33,26,.5);
+        font-variant-numeric: tabular-nums;
+      }
+      .toast {
+        position: fixed;
+        left: 50%;
+        top: 22px;
+        transform: translate(-50%, -80px);
+        background: #2e291f;
+        color: #f8f2e8;
+        padding: 9px 16px;
+        border-radius: 999px;
+        font-size: 13px;
+        z-index: 5;
+        transition: transform .3s cubic-bezier(.2,.8,.2,1);
+        box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      }
+      .toast.show { transform: translate(-50%, 0); }
+      @media (max-width: 700px) {
+        .panel { top: auto; bottom: 10px; right: 10px; left: 10px; width: auto; max-height: 46vh; border-radius: 16px; }
+        .brand small { display: none; }
+        .hint { display: none; }
+        .fps { right: 18px; bottom: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <div class="ui-frame">
+      <div class="vignette"></div>
+      <div class="brand">
+        <span class="dot"></span>
+        <b>Render</b>
+        <small>3D-printed ceramic · WebGL</small>
+      </div>
+      <div class="hint">Drag to orbit · scroll to zoom · double-click to reset</div>
+      <div class="fps" id="fps"></div>
+
+      <aside class="panel">
+        <h2>Ceramic studio</h2>
+        <p class="sub">Clay extrusion layers + fired glaze</p>
+
+        <div class="swatches" id="presets"></div>
+
+        <div class="field">
+          <div class="row"><label>Glaze dip</label><output id="glazeOut">68%</output></div>
+          <input type="range" id="glaze" min="0" max="95" value="68" />
+        </div>
+        <div class="field">
+          <div class="row"><label>Layer height</label><output id="layerOut">1.0 mm</output></div>
+          <input type="range" id="layer" min="0.6" max="1.5" step="0.05" value="1.0" />
+        </div>
+        <div class="field">
+          <div class="row"><label>Cup height</label><output id="heightOut">86 mm</output></div>
+          <input type="range" id="height" min="52" max="130" step="1" value="86" />
+        </div>
+        <div class="field">
+          <div class="row"><label>Diameter</label><output id="diameterOut">74 mm</output></div>
+          <input type="range" id="diameter" min="55" max="110" step="1" value="74" />
+        </div>
+        <div class="field">
+          <div class="row"><label>Wall thickness</label><output id="wallOut">4 mm</output></div>
+          <input type="range" id="wall" min="1.5" max="6" step="0.1" value="4" />
+        </div>
+
+        <div class="field">
+          <div class="row"><label>Quality</label></div>
+          <div class="segmented" id="qualitySeg">
+            <button data-quality="low">Low</button>
+            <button data-quality="medium" class="active">Medium</button>
+            <button data-quality="high">High</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="toggleSpin">Pause spin</button>
+          <button id="resetView">Reset view</button>
+          <button class="primary" id="snapshot">Download 4K snapshot</button>
+        </div>
+      </aside>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
