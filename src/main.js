@@ -27,7 +27,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 0.9;
 stageEl.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -46,7 +46,7 @@ controls.update();
 const pmrem = new THREE.PMREMGenerator(renderer);
 const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
 scene.environment = envTexture;
-scene.environmentIntensity = 0.8;
+scene.environmentIntensity = 0.55;
 pmrem.dispose();
 
 /*
@@ -57,7 +57,7 @@ pmrem.dispose();
  */
 RectAreaLightUniformsLib.init();
 
-const keyLight = new THREE.DirectionalLight(0xfff2e2, 1.5);
+const keyLight = new THREE.DirectionalLight(0xfff2e2, 1.0);
 keyLight.position.set(-260, 240, -210);
 keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(2048, 2048);
@@ -71,7 +71,7 @@ keyLight.shadow.bias = -0.0004;
 keyLight.shadow.radius = 9;
 scene.add(keyLight);
 
-const secondaryShadowLight = new THREE.DirectionalLight(0xfff7ec, 0.62);
+const secondaryShadowLight = new THREE.DirectionalLight(0xfff7ec, 0.42);
 secondaryShadowLight.position.set(190, 260, 230);
 secondaryShadowLight.castShadow = true;
 secondaryShadowLight.shadow.mapSize.set(1024, 1024);
@@ -88,7 +88,7 @@ scene.add(secondaryShadowLight);
 const studioLights = [
   {
     color: 0xffedd6,
-    intensity: 4.2,
+    intensity: 1.8,
     width: 420,
     height: 300,
     position: [-360, 300, -260],
@@ -96,7 +96,7 @@ const studioLights = [
   },
   {
     color: 0xe8f2ff,
-    intensity: 2.2,
+    intensity: 0.9,
     width: 360,
     height: 250,
     position: [340, 210, 330],
@@ -104,7 +104,7 @@ const studioLights = [
   },
   {
     color: 0xfff6e8,
-    intensity: 1.6,
+    intensity: 0.75,
     width: 520,
     height: 180,
     position: [0, 430, 0],
@@ -112,7 +112,7 @@ const studioLights = [
   },
   {
     color: 0xe4ecff,
-    intensity: 2.6,
+    intensity: 1.1,
     width: 360,
     height: 300,
     position: [70, 300, -380],
@@ -120,7 +120,7 @@ const studioLights = [
   },
   {
     color: 0xfff4e4,
-    intensity: 0.9,
+    intensity: 0.38,
     width: 280,
     height: 200,
     position: [-300, 120, 300],
@@ -136,7 +136,7 @@ for (const cfg of studioLights) {
   scene.add(light);
 }
 
-const fillLight = new THREE.HemisphereLight(0xf5ead8, 0x4f4840, 0.55);
+const fillLight = new THREE.HemisphereLight(0xf5ead8, 0x4f4840, 0.3);
 scene.add(fillLight);
 
 const cupGroup = new THREE.Group();
@@ -151,10 +151,10 @@ function gradientTexture() {
   c.height = 256;
   const ctx = c.getContext("2d");
   const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, "#fcf7ef");
-  grad.addColorStop(0.45, "#f1e9dc");
-  grad.addColorStop(0.9, "#d3c6b2");
-  grad.addColorStop(1, "#c5b59f");
+  grad.addColorStop(0, "#eee6d7");
+  grad.addColorStop(0.45, "#ded4c2");
+  grad.addColorStop(0.9, "#b8a890");
+  grad.addColorStop(1, "#a08e77");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 16, 256);
   const t = new THREE.CanvasTexture(c);
@@ -173,7 +173,7 @@ scene.add(backdrop);
 const studioFloor = new THREE.Mesh(
   new THREE.CircleGeometry(2200, 96).rotateX(-Math.PI / 2),
   new THREE.MeshPhysicalMaterial({
-    color: 0xe6dccc,
+    color: 0xcfc6b3,
     roughness: 0.62,
     metalness: 0,
     clearcoat: 0.08,
