@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 
 /*
  * Blender path: the cup and its materials are authored in Blender
@@ -45,11 +46,19 @@ controls.update();
 const pmrem = new THREE.PMREMGenerator(renderer);
 const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
 scene.environment = envTexture;
+scene.environmentIntensity = 0.8;
 pmrem.dispose();
 
-// Shadows: real PCF key shadow + wide radial-gradient layers on the floor.
-const keyLight = new THREE.DirectionalLight(0xfff0da, 2.5);
-keyLight.position.set(-185, 250, -165);
+/*
+ * Studio lighting, not a single source:
+ *  - four large softbox area lights around the product;
+ *  - warm/cool separation so surfaces don't go flat;
+ *  - one low-intensity directional only to keep a very soft shadow shape.
+ */
+RectAreaLightUniformsLib.init();
+
+const keyLight = new THREE.DirectionalLight(0xfff2e2, 0.85);
+keyLight.position.set(-260, 240, -210);
 keyLight.castShadow = true;
 keyLight.shadow.mapSize.set(2048, 2048);
 keyLight.shadow.camera.near = 10;
@@ -59,14 +68,61 @@ keyLight.shadow.camera.right = 180;
 keyLight.shadow.camera.top = 180;
 keyLight.shadow.camera.bottom = -180;
 keyLight.shadow.bias = -0.0004;
-keyLight.shadow.radius = 7;
+keyLight.shadow.radius = 9;
 scene.add(keyLight);
 
-const frontRim = new THREE.DirectionalLight(0xcfe2ff, 0.9);
-frontRim.position.set(175, 90, 240);
-scene.add(frontRim);
+const studioLights = [
+  {
+    color: 0xffedd6,
+    intensity: 4.2,
+    width: 420,
+    height: 300,
+    position: [-360, 300, -260],
+    label: "key-softbox",
+  },
+  {
+    color: 0xe8f2ff,
+    intensity: 2.2,
+    width: 360,
+    height: 250,
+    position: [340, 210, 330],
+    label: "fill-softbox",
+  },
+  {
+    color: 0xfff6e8,
+    intensity: 1.6,
+    width: 520,
+    height: 180,
+    position: [0, 430, 0],
+    label: "overhead-softbox",
+  },
+  {
+    color: 0xe4ecff,
+    intensity: 2.6,
+    width: 360,
+    height: 300,
+    position: [70, 300, -380],
+    label: "rim-softbox",
+  },
+  {
+    color: 0xfff4e4,
+    intensity: 0.9,
+    width: 280,
+    height: 200,
+    position: [-300, 120, 300],
+    label: "bounce",
+  },
+];
 
-const fillLight = new THREE.HemisphereLight(0xfff2df, 0x6f6557, 0.35);
+for (const cfg of studioLights) {
+  const light = new THREE.RectAreaLight(cfg.color, cfg.intensity, cfg.width, cfg.height);
+  light.position.set(...cfg.position);
+  light.lookAt(0, 34, 0);
+  light.name = cfg.label;
+  scene.add(light);
+}
+
+const fillLight = new THREE.HemisphereLight(0xf5ead8, 0x4f4840, 0.55);
 scene.add(fillLight);
 
 const cupGroup = new THREE.Group();
@@ -100,13 +156,19 @@ backdrop.position.y = 680;
 backdrop.frustumCulled = false;
 scene.add(backdrop);
 
-const shadowPlane = new THREE.Mesh(
-  new THREE.CircleGeometry(1800, 64).rotateX(-Math.PI / 2),
-  new THREE.ShadowMaterial({ opacity: 0.3 })
+const studioFloor = new THREE.Mesh(
+  new THREE.CircleGeometry(2200, 96).rotateX(-Math.PI / 2),
+  new THREE.MeshPhysicalMaterial({
+    color: 0xe6dccc,
+    roughness: 0.62,
+    metalness: 0,
+    clearcoat: 0.08,
+    envMapIntensity: 0.4,
+  })
 );
-shadowPlane.position.y = -0.12;
-shadowPlane.receiveShadow = true;
-scene.add(shadowPlane);
+studioFloor.position.y = -0.12;
+studioFloor.receiveShadow = true;
+scene.add(studioFloor);
 
 function softShadowTexture() {
   const s = 512;
