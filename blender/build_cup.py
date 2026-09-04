@@ -172,7 +172,7 @@ def rand(u, v, seed=0):
 def clay_speckle(u, v, clay_rgb):
     r, g, b = clay_rgb
     # Delicate, slightly mottled fired clay. No hard pixel speckles.
-    grain = pnoise(u, v, 13) * 0.02 + (rand(math.floor(u * 61), math.floor(v * 47), 4) - 0.5) * 0.025
+    grain = pnoise(u, v, 13) * 0.018
     f = min(1.05, max(0.96, 1 + grain))
     return (r * f, g * f, b * f)
 
@@ -219,17 +219,11 @@ def build_body_textures(clay_id, out_dir):
         for px in range(TEX_W):
             u = (px + 0.5) / TEX_W
             g = glaze_cover(u, y, H)
-            raw = clay_speckle(u, v, rgb)
-            dark = glazed_clay(u, v, rgb)
-            s = g * g * (3 - 2 * g)
-            # Glazed parts stay clearly darker than raw clay even when lit.
-            c = (
-                raw[0] * (1 - s) + dark[0] * s,
-                raw[1] * (1 - s) + dark[1] * s,
-                raw[2] * (1 - s) + dark[2] * s,
-            )
-            raw_rough = 0.78 + pnoise(u, v, 21) * 0.02
-            glass_rough = 0.14 + pnoise(u, v, 37) * 0.02
+            # Base colour is the same clay everywhere. Glaze differs only in
+            # roughness + clearcoat, never through a separate dark paint layer.
+            c = clay_speckle(u, v, rgb)
+            raw_rough = 0.8 + pnoise(u, v, 21) * 0.02
+            glass_rough = 0.2 + pnoise(u, v, 37) * 0.02
             rough = raw_rough * (1 - g) + glass_rough * g
             row_color += bytes((clamp255(c[0]), clamp255(c[1]), clamp255(c[2]), 255))
             row_rough += bytes((clamp255(rough * 255),) * 4)
@@ -244,26 +238,6 @@ def build_body_textures(clay_id, out_dir):
     write_png(out_dir / f"body-color-{clay_id}.png", TEX_W, TEX_H, getter(color_rows))
     write_png(out_dir / f"body-rough-{clay_id}.png", TEX_W, TEX_H, getter(rough_rows))
     write_png(out_dir / f"body-coat-{clay_id}.png", TEX_W, TEX_H, getter(coat_rows))
-
-
-def build_glaze_texture(clay_id, out_dir):
-    """Full-coverage glazed clay for the interior and handle."""
-    rgb = CLAYS[clay_id]["rgb"]
-    color_rows = []
-    for py in range(TEX_H):
-        v = 1 - (py + 0.5) / TEX_H
-        row = bytearray()
-        for px in range(TEX_W):
-            u = (px + 0.5) / TEX_W
-            c = glazed_clay(u, v, rgb)
-            row += bytes((clamp255(c[0]), clamp255(c[1]), clamp255(c[2]), 255))
-        color_rows.append(bytes(row))
-    write_png(
-        out_dir / f"glaze-color-{clay_id}.png",
-        TEX_W,
-        TEX_H,
-        lambda px, py: color_rows[py][px * 4 : px * 4 + 4],
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -403,12 +377,15 @@ def handle(name, glaze_mat):
         t = (-math.sin(phi), 0.0, math.cos(phi))
         b1 = (0.0, 1.0, 0.0)
         b2 = (-t[2], 0.0, t[0])
+        # Faint printed segmentation along the handle loop (~1 mm pitch).
+        ridge = 1 + 0.035 * (0.5 + 0.5 * math.cos(major * phi / LH))
         for j in range(S):
             psi = j / S * math.pi * 2
+            tube = tube_r * ridge
             offset = (
-                b1[0] * tube_r * math.cos(psi) + b2[0] * tube_r * math.sin(psi),
-                b1[1] * tube_r * math.cos(psi) + b2[1] * tube_r * math.sin(psi),
-                b1[2] * tube_r * math.cos(psi) + b2[2] * tube_r * math.sin(psi),
+                b1[0] * tube * math.cos(psi) + b2[0] * tube * math.sin(psi),
+                b1[1] * tube * math.cos(psi) + b2[1] * tube * math.sin(psi),
+                b1[2] * tube * math.cos(psi) + b2[2] * tube * math.sin(psi),
             )
             verts.append((center[0] + offset[0], center[1] + offset[1], center[2] + offset[2]))
 
@@ -477,7 +454,7 @@ def glaze_material(name, clay_rgb, glaze_color_path):
     p = principled(mat)
     color = image_node(mat, glaze_color_path, "sRGB", -600, 300)
     mat.node_tree.links.new(color.outputs["Color"], p.inputs["Base Color"])
-    p.inputs["Roughness"].default_value = 0.15
+    p.inputs["Roughness"].default_value = 0.2
     p.inputs["Coat Weight"].default_value = 1.0
     p.inputs["Coat Roughness"].default_value = 0.1
     p.inputs["IOR"].default_value = 1.45
@@ -511,14 +488,13 @@ def main():
     model_dir.mkdir(parents=True, exist_ok=True)
 
     build_body_textures(args.clay, tex_dir)
-    build_glaze_texture(args.clay, tex_dir)
     clear_scene()
 
     body_mat = body_material(f"body-{args.clay}", tex_dir, args.clay)
     glaze_mat = glaze_material(
         f"glaze-{args.clay}",
         CLAYS[args.clay]["rgb"],
-        tex_dir / f"glaze-color-{args.clay}.png",
+        tex_dir / f"body-color-{args.clay}.png",
     )
 
     outer = lathe_surface("outer-wall", inner=False)
@@ -534,7 +510,7 @@ def main():
     floor.data.materials.append(glaze_mat)
 
     rim_cap("rim-cap", body_mat)
-    handle("handle", glaze_mat)
+    handle("handle", body_mat)
 
     # Blender is unit-neutral here; the mesh was authored in millimetres, so
     # bring it down to GLTF metres and bake the transform into the mesh.

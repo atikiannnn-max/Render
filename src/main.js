@@ -23,10 +23,11 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = false;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.AgXToneMapping;
-renderer.toneMappingExposure = 1.09;
+renderer.toneMappingExposure = 0.9;
 stageEl.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -45,7 +46,7 @@ controls.update();
 const pmrem = new THREE.PMREMGenerator(renderer);
 const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
 scene.environment = envTexture;
-scene.environmentIntensity = 0.42;
+scene.environmentIntensity = 0.18;
 pmrem.dispose();
 
 /*
@@ -53,50 +54,58 @@ pmrem.dispose();
  *  - very large key softbox above-left/front, roughly 3x the cup;
  *  - broad cool fill right/front, 25-40% of key;
  *  - weak top/back source only to separate the rim from the backdrop.
- * No directional/point/sun lights. Shadows come from wide radial gradients.
+ * Area lights do not cast shadows in three.js, so one very soft, low-intensity
+ * directional "shadow carrier" follows the key light position. It is a
+ * technical shadow source, not a visible key.
  */
 RectAreaLightUniformsLib.init();
 
+const shadowCarrier = new THREE.DirectionalLight(0xfffbf4, 0.55);
+shadowCarrier.position.set(-300, 330, 170);
+shadowCarrier.castShadow = true;
+shadowCarrier.shadow.mapSize.set(2048, 2048);
+shadowCarrier.shadow.camera.near = 10;
+shadowCarrier.shadow.camera.far = 800;
+shadowCarrier.shadow.camera.left = -220;
+shadowCarrier.shadow.camera.right = 220;
+shadowCarrier.shadow.camera.top = 220;
+shadowCarrier.shadow.camera.bottom = -220;
+shadowCarrier.shadow.bias = -0.0002;
+shadowCarrier.shadow.radius = 16;
+scene.add(shadowCarrier);
+
 const studioLights = [
   {
-    color: 0xffedd6,
-    intensity: 3.1,
-    width: 520,
-    height: 380,
+    color: 0xfff8ef,
+    intensity: 3.0,
+    width: 560,
+    height: 420,
     position: [-300, 330, 170],
     label: "key-softbox",
   },
   {
-    color: 0xe8f2ff,
-    intensity: 0.55,
-    width: 440,
-    height: 300,
+    color: 0xf4f6f8,
+    intensity: 0.95,
+    width: 460,
+    height: 320,
     position: [300, 190, 310],
     label: "fill-softbox",
   },
   {
-    color: 0xfff6e8,
-    intensity: 0.55,
-    width: 600,
-    height: 220,
+    color: 0xffffff,
+    intensity: 0.4,
+    width: 700,
+    height: 260,
     position: [0, 420, 80],
     label: "overhead-softbox",
   },
   {
-    color: 0xe4ecff,
-    intensity: 0.7,
-    width: 460,
-    height: 340,
+    color: 0xffffff,
+    intensity: 0.6,
+    width: 500,
+    height: 360,
     position: [60, 300, -350],
     label: "rim-softbox",
-  },
-  {
-    color: 0xfff4e4,
-    intensity: 0.25,
-    width: 280,
-    height: 200,
-    position: [-280, 110, -220],
-    label: "bounce",
   },
 ];
 
@@ -112,82 +121,92 @@ const cupGroup = new THREE.Group();
 cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
 scene.add(cupGroup);
 
-/* ---------------- studio backdrop ---------------- */
+/* ---------------- seamless curved cyclorama ---------------- */
 
-function gradientTexture() {
-  const c = document.createElement("canvas");
-  c.width = 16;
-  c.height = 256;
-  const ctx = c.getContext("2d");
-  const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, "#7e7c78");
-  grad.addColorStop(0.45, "#7b7975");
-  grad.addColorStop(0.9, "#6c6a66");
-  grad.addColorStop(1, "#615f5c");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 16, 256);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
+const cycloramaMat = new THREE.MeshStandardMaterial({
+  color: 0x9b9894,
+  roughness: 0.94,
+  metalness: 0,
+  vertexColors: true,
+  envMapIntensity: 0.12,
+});
 
-const backdrop = new THREE.Mesh(
-  new THREE.CylinderGeometry(1500, 1500, 2600, 48, 1, true),
-  new THREE.MeshBasicMaterial({ map: gradientTexture(), side: THREE.BackSide, depthWrite: false })
-);
-backdrop.position.y = 680;
-backdrop.frustumCulled = false;
-scene.add(backdrop);
+function buildCyclorama() {
+  // Cross-section (Y,Z): floor -> 90° fillet -> back wall, all one surface.
+  const floorFront = 1600;
+  const cornerStart = -1700;
+  const wallZ = -2000;
+  const filletR = 300;
+  const wallTop = 1500;
+  const halfWidth = 2100;
+  const xSegs = 5;
+  const pts = [];
 
-const studioFloor = new THREE.Mesh(
-  new THREE.CircleGeometry(2200, 96).rotateX(-Math.PI / 2),
-  new THREE.MeshPhysicalMaterial({
-    color: 0x5d5b57,
-    roughness: 0.92,
-    metalness: 0,
-    clearcoat: 0,
-    envMapIntensity: 0.08,
-  })
-);
-studioFloor.position.y = -0.12;
-studioFloor.receiveShadow = true;
-scene.add(studioFloor);
+  // Floor samples.
+  const floorSegs = 36;
+  for (let i = 0; i <= floorSegs; i++) {
+    const t = i / floorSegs;
+    pts.push([floorFront + (cornerStart - floorFront) * t, 0]);
+  }
+  // Fillet: quarter circle centred at (cornerStart, 0), ending at back wall.
+  const filletSegs = 24;
+  for (let i = 1; i <= filletSegs; i++) {
+    const s = (i / filletSegs) * Math.PI * 0.5;
+    pts.push([cornerStart - filletR * Math.sin(s), filletR * (1 - Math.cos(s))]);
+  }
+  // Back wall.
+  const wallSegs = 26;
+  for (let i = 1; i <= wallSegs; i++) {
+    const t = i / wallSegs;
+    pts.push([wallZ, filletR + (wallTop - filletR) * t]);
+  }
 
-function softShadowTexture() {
-  const s = 512;
-  const c = document.createElement("canvas");
-  c.width = s;
-  c.height = s;
-  const ctx = c.getContext("2d");
-  const grad = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-  grad.addColorStop(0, "rgba(0,0,0,0.92)");
-  grad.addColorStop(0.32, "rgba(0,0,0,0.52)");
-  grad.addColorStop(0.68, "rgba(0,0,0,0.16)");
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, s, s);
-  return new THREE.CanvasTexture(c);
-}
+  const positions = [];
+  const colors = [];
+  const index = [];
+  // Lighting hits the horizontal floor harder than the back wall, so each
+  // profile point gets a soft baked light-response factor. No separate
+  // material or painted shadow: it is still one continuous cyclorama.
+  const ptFactor = new Array(pts.length).fill(0.9);
+  const floorCount = 1 + floorSegs;
+  for (let i = 0; i < floorCount; i++) ptFactor[i] = 0.44 + 0.08 * (i / floorSegs);
+  const wallStart = floorCount + filletSegs;
+  for (let i = 1; i <= filletSegs; i++) {
+    const t = i / filletSegs;
+    ptFactor[floorCount + i - 1] = 0.52 + 0.3 * t;
+  }
+  for (let i = 0; i < wallSegs; i++) ptFactor[wallStart + i] = 0.94;
+  for (let xi = 0; xi <= xSegs; xi++) {
+    const x = -halfWidth + (2 * halfWidth * xi) / xSegs;
+    for (let pi = 0; pi < pts.length; pi++) {
+      positions.push(x, pts[pi][1], pts[pi][0]);
+      const f = ptFactor[pi];
+      colors.push(f, f, f);
+    }
+  }
+  const stride = pts.length;
+  for (let xi = 0; xi < xSegs; xi++) {
+    for (let pi = 0; pi < stride - 1; pi++) {
+      const a = xi * stride + pi;
+      const b = (xi + 1) * stride + pi;
+      const c = (xi + 1) * stride + pi + 1;
+      const d = xi * stride + pi + 1;
+      index.push(a, b, c, a, c, d);
+    }
+  }
 
-function addShadowBlob(x, z, sx, sz, opacity) {
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({
-      map: softShadowTexture(),
-      transparent: true,
-      opacity,
-      depthWrite: false,
-    })
-  );
-  mesh.position.set(x, -0.1, z);
-  mesh.scale.set(sx, sz, 1);
-  mesh.renderOrder = 1;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  const mesh = new THREE.Mesh(geometry, cycloramaMat);
+  mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
   scene.add(mesh);
 }
 
-addShadowBlob(0, 0, 145, 145, 0.5);
-addShadowBlob(72, 34, 220, 155, 0.3);
-addShadowBlob(-90, -40, 290, 190, 0.2);
+buildCyclorama();
 
 /* ---------------- GLB loading ---------------- */
 
