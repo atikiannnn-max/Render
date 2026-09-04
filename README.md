@@ -1,59 +1,45 @@
-# Render — 3D-printed ceramic cup
+# Render — глазурованная керамика
 
-Lightweight, photorealistic WebGL showcase of a cup made on a clay 3D printer:
-the surface keeps the visible extrusion layers of raw clay, while selected zones
-carry a glossy fired glaze.
+Лёгкий WebGL-рендер кружки, напечатанной из глины на 3D-принтере. Снаружи
+видна слоистость экструзии; глазурь прозрачная и глянцевая, поэтому она не
+закрашивает глину, а делает её примерно на 30% темнее и насыщеннее под
+стеклянным покрытием.
 
-![Hero render](docs/hero.png)
+![Серо-бежевая глина](docs/hero.png)
 
-The procedural model follows the same construction idea as the
-[Constructor / Clay Cup Builder](https://github.com/atikiannnn-max/Pasted-Assets)
-project (a parametric cup built from revolved contours with printable bead
-layers). `Render` is a fresh, dependency-light implementation focused on one
-thing: a beautiful studio render that stays smooth.
+## Что сейчас в кадре
 
-## Run locally
+- Два варианта глины: чистая серо-бежевая и тёмная «асфальт».
+- Прозрачная глянцевая глазурь: внутри чашки, на ободке (1 мм), на круглом
+  рельефе снаружи и на ручке.
+- Круглый барельеф встроен в геометрию стенки, а маска глазури использует ту
+  же конфигурацию рельефа — покрытие ложится точно на выпуклость.
+- Несколько слоёв мягких теней: настоящая PCF-тень от ключевого света плюс
+  три широких радиальных градиента, как в студийном продуктовом кадре.
+
+## Запуск
 
 ```bash
 npm install
 npm run dev
 ```
 
-Production build:
+Продакшн-сборка:
 
 ```bash
 npm run build
 npm run preview
 ```
 
-Only one runtime dependency is used: [`three`](https://www.npmjs.com/package/three).
-A prebuilt copy of the current release is kept on the `gh-pages` branch for the
-live preview.
+Единственная runtime-зависимость — [`three`](https://www.npmjs.com/package/three).
+Текущая версия опубликована на `gh-pages` для живого превью.
 
-## How the render is built
-
-- The cup geometry is generated procedurally in millimeters: outer wall, hollow
-  interior, rim cap and a soft-loop handle.
-- Each wall is subdivided at sub-millimeter height so the printer's layer lines
-  are real geometry, not just a texture trick. A tiny deterministic wobble
-  per printed loop makes the clay look handmade.
-- Glaze maps (color, roughness, clearcoat) are painted at runtime on a canvas:
-  the dip line is organic, it drips, and the wiped rim/foot stay raw.
-- Lighting is a PMREM studio environment plus a shadow-casting key light, with
-  ACES tone mapping and capped device pixel ratio for smooth interaction.
-
-## Controls
-
-- Drag to orbit, scroll to zoom, double-click to reset.
-- Switch glaze presets and cup parameters on the right.
-- `Low / Medium / High` quality rebalances vertex density and texture size.
-- `Download 4K snapshot` captures the current view.
-
-## Structure
+## Структура
 
 ```
 src/
-  main.js            scene bootstrap + UI wiring
-  cupGeometry.js     parametric printed-cup geometry
-  ceramicTextures.js procedural color / roughness / clearcoat / normal maps
+  main.js            сцена, свет, мягкие тени, выбор глины
+  cupGeometry.js     параметрическая геометрия кружки со слоями печати
+  medallion.js       конфигурация круглого барельефа
+  ceramicTextures.js процедурные карты двух глин и прозрачной глазури
 ```

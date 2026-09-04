@@ -1,72 +1,48 @@
 import * as THREE from "three";
+import { profileRadiusAt, CUP_PROFILES } from "./cupGeometry.js";
+import { MEDALLION, medallionCoverage } from "./medallion.js";
 
 /*
- * All maps are painted once at runtime onto canvases, so the repo ships no
- * binary assets and every glaze preset stays editable in code.
+ * Only two clays right now: clean grey-beige and asphalt.
+ *
+ * The glaze is transparent and glossy: it does not paint a colour over the
+ * clay. Instead glazed clay is rendered roughly 30% darker and more saturated,
+ * which is how the material behaves when it is wet under a clear glassy coat.
  */
 
-export const CERAMIC_PRESETS = [
+export const CLAYS = [
   {
-    id: "cobalt",
-    name: "Cobalt dip",
-    clay: [230, 217, 197],
-    glaze: [33, 65, 148],
-    glazeLight: [72, 111, 206],
-    swatch: "linear-gradient(180deg,#e7dcc8 0 30%, #214190 58% 100%)",
+    id: "stone",
+    name: "Серо-бежевая глина",
+    rgb: [198, 188, 168],
   },
   {
-    id: "celadon",
-    name: "Celadon",
-    clay: [222, 211, 188],
-    glaze: [124, 169, 147],
-    glazeLight: [158, 199, 177],
-    swatch: "linear-gradient(180deg,#ded3bd 0 30%, #7ca993 58% 100%)",
-  },
-  {
-    id: "oxblood",
-    name: "Oxblood",
-    clay: [214, 200, 181],
-    glaze: [105, 36, 28],
-    glazeLight: [144, 67, 51],
-    swatch: "linear-gradient(180deg,#d8c9b6 0 30%, #69241c 58% 100%)",
-  },
-  {
-    id: "cream",
-    name: "Cream",
-    clay: [200, 158, 113],
-    glaze: [238, 226, 198],
-    glazeLight: [250, 242, 222],
-    swatch: "linear-gradient(180deg,#c89e71 0 30%, #eee2c6 58% 100%)",
-  },
-  {
-    id: "graphite",
-    name: "Graphite",
-    clay: [190, 180, 162],
-    glaze: [43, 47, 53],
-    glazeLight: [88, 94, 103],
-    swatch: "linear-gradient(180deg,#beb4a2 0 30%, #2b2f35 58% 100%)",
+    id: "asphalt",
+    name: "Асфальт",
+    rgb: [52, 53, 54],
   },
 ];
 
-const DIMS = {
-  low: [512, 320],
-  medium: [1024, 512],
-  high: [1536, 768],
-};
+const MAP_W = 1024;
+const MAP_H = 512;
 
-const rand = (u, v, seed = 0) => {
+function rand(u, v, seed = 0) {
   const s = Math.sin(u * 127.1 + v * 311.7 + seed * 74.7) * 43758.5453;
   return s - Math.floor(s);
-};
+}
 
-const pnoise = (u, v, seed = 0) => {
+function pnoise(u, v, seed = 0) {
   return (
     Math.sin(u * 6.2831 * 5 + seed) * 0.5 +
     Math.sin(u * 6.2831 * 13 + v * 2.1 + seed * 1.7) * 0.28 +
     Math.sin((u + v * 0.37) * 6.2831 * 29 + seed * 3.1) * 0.12 +
     Math.sin(v * 6.2831 * 2.3 + seed * 2.2) * 0.1
   );
-};
+}
+
+function clamp255(v) {
+  return Math.max(0, Math.min(255, Math.round(v)));
+}
 
 function makeCanvas(w, h) {
   const c = document.createElement("canvas");
@@ -75,29 +51,28 @@ function makeCanvas(w, h) {
   return c;
 }
 
-function toTexture(canvas, srgb = false, repeatU = true) {
+function toTexture(canvas, srgb = false) {
   const t = new THREE.CanvasTexture(canvas);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = repeatU ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+  t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.ClampToEdgeWrapping;
   t.anisotropy = 4;
   t.needsUpdate = true;
   return t;
 }
 
-function paint(w, h, fn) {
-  const canvas = makeCanvas(w, h);
+function paint(fn) {
+  const canvas = makeCanvas(MAP_W, MAP_H);
   const ctx = canvas.getContext("2d");
-  const img = ctx.createImageData(w, h);
+  const img = ctx.createImageData(MAP_W, MAP_H);
   const d = img.data;
-  for (let py = 0; py < h; py++) {
-    for (let px = 0; px < w; px++) {
-      const u = (px + 0.5) / w;
-      // Canvas row 0 is its top. Three.js flips canvas textures by default,
-      // so the top row is sampled at v = 1 (the top of the cup).
-      const v = 1 - (py + 0.5) / h;
-      const i = (py * w + px) * 4;
-      const out = fn(u, v, px, py);
+  for (let py = 0; py < MAP_H; py++) {
+    for (let px = 0; px < MAP_W; px++) {
+      const u = (px + 0.5) / MAP_W;
+      // Canvas top row becomes v = 1 after Three.js flips canvas textures.
+      const v = 1 - (py + 0.5) / MAP_H;
+      const i = (py * MAP_W + px) * 4;
+      const out = fn(u, v);
       d[i] = out[0];
       d[i + 1] = out[1];
       d[i + 2] = out[2];
@@ -108,139 +83,92 @@ function paint(w, h, fn) {
   return canvas;
 }
 
-function smoothEdge(x, a, b) {
-  const t = Math.min(1, Math.max(0, (x - a) / Math.max(1e-6, b - a)));
-  return t * t * (3 - 2 * t);
+function medallionCoverageForTexture(u, yMm, H, D) {
+  const t = yMm / H;
+  const R = (D / 2) * profileRadiusAt(CUP_PROFILES.mug, t);
+  return medallionCoverage(u * Math.PI * 2, yMm, H, R);
 }
 
-function outerCoverage(u, yMm, model) {
-  const { height: H, glazeDip } = model;
-  if (glazeDip <= 0.005) return 0;
-  const foot = 4.2;
-  if (yMm < foot) return 0;
-
-  const lineMm = H * glazeDip;
-  const wave =
-    Math.sin(u * 6.2831 * 5 + Math.sin(u * 6.2831 * 13) * 1.4) * 0.012 +
-    Math.sin(u * 6.2831 * 17 + 0.7) * 0.006;
-  const edgeMm = lineMm + wave * H;
-  if (yMm > edgeMm + 1.8) return 0;
-
-  const fromFoot = smoothEdge(yMm, foot, foot + 4);
-  const fromTop = 1 - smoothEdge(yMm, edgeMm - 4, edgeMm + 1.8);
-  return Math.min(fromFoot, fromTop);
+/**
+ * Outer wall glazing: a 1 mm band around the rim and the round relief.
+ * Everything else stays raw clay.
+ */
+function outerGlazeCoverage(u, yMm, H, D) {
+  const top = yMm > H - 1.0 ? 1 : 0;
+  const relief = medallionCoverageForTexture(u, yMm, H, D);
+  return Math.max(top, relief);
 }
 
-function glazeEdgeFactor(u, yMm, H, glazeDip) {
-  if (glazeDip <= 0.005) return 0;
-  const edge = H * glazeDip;
-  const distance = Math.abs(yMm - edge);
-  const pool = 1 - Math.min(1, Math.max(0, (distance - 0.8) / 3.2));
-  const longWave = 0.6 + 0.4 * Math.sin(u * 6.2831 * 4 + 1.2);
-  return pool * longWave;
-}
-
-function layerHeight01(yMm, model) {
-  if (!model.showLayers || model.layerHeight <= 0) return 0;
-  const phase = yMm / model.layerHeight - 0.5;
-  const d = phase - Math.round(phase);
-  return 0.5 + 0.5 * Math.cos(Math.PI * 2 * d);
-}
-
-function layerSlope(yMm, model) {
-  if (!model.showLayers || model.layerHeight <= 0) return 0;
-  const phase = yMm / model.layerHeight - 0.5;
-  const d = phase - Math.round(phase);
-  const amp = 0.052 + model.layerHeight * 0.062;
-  return -(amp * Math.PI / model.layerHeight) * Math.sin(Math.PI * 2 * d);
-}
-
-function clayColorAt(u, v, preset, mix) {
-  const c = preset.clay;
+function rawClay(u, v, clay) {
+  const [r, g, b] = clay.rgb;
   const grain =
-    pnoise(u, v, 11) * 0.055 +
-    (rand(Math.floor(u * 37), Math.floor(v * 61), 5) - 0.5) * 0.1;
-  const speck = (rand(Math.floor(u * 151), Math.floor(v * 97), 3) - 0.5);
-  const darkSpeck = Math.abs(speck) > 0.493 ? (speck > 0 ? -0.25 : 0.18) : 0;
-  let f = 1 + grain + darkSpeck * (Math.abs(speck) > 0.493 ? 1 : 0);
-  f += (1 - mix) * 0.0;
-  f = Math.min(1.16, Math.max(0.72, f));
-  return [clamp255(c[0] * f), clamp255(c[1] * f), clamp255(c[2] * f)];
+    pnoise(u, v, 13) * 0.035 +
+    (rand(Math.floor(u * 71), Math.floor(v * 83), 4) - 0.5) * 0.07;
+  const speck = rand(Math.floor(u * 173), Math.floor(v * 149), 7) - 0.5;
+  const hardSpeck = Math.abs(speck) > 0.485 ? (speck > 0 ? -0.12 : 0.08) : 0;
+  const f = Math.min(1.1, Math.max(0.84, 1 + grain + hardSpeck));
+  return [r * f, g * f, b * f];
 }
 
-function glazeColorAt(u, v, preset, extra = 1) {
-  const g = preset.glaze;
-  const light = preset.glazeLight;
-  const mottle = pnoise(u, v, 77) * 0.13;
-  const flake = rand(Math.floor(u * 211), Math.floor(v * 173), 9);
-  const thin = flake > 0.976 ? (flake > 0.988 ? 0.78 : 1.22) : 1;
-  const blueShift = Math.sin((u * 7 + v * 4) * Math.PI * 2) * 0.04;
-  const f = 1 + mottle + blueShift + (thin - 1) * 0.35;
-  const mixLight = 0.5 + 0.5 * pnoise(u * 3.1, v * 2.7, 4);
-  const r = g[0] * (1 - mixLight) + light[0] * mixLight;
-  const gg = g[1] * (1 - mixLight) + light[1] * mixLight;
-  const b = g[2] * (1 - mixLight) + light[2] * mixLight;
-  const k = Math.min(1.22, Math.max(0.76, f * extra));
-  return [clamp255(r * k), clamp255(gg * k), clamp255(b * k)];
+/** Clear-glass look: no glaze hue, only darken and saturate the clay below. */
+function wetClay(u, v, clay, amount = 0.72, saturation = 1.38) {
+  const [r, g, b] = rawClay(u, v, clay);
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const sr = lum + (r - lum) * saturation;
+  const sg = lum + (g - lum) * saturation;
+  const sb = lum + (b - lum) * saturation;
+  const mottle = 1 + pnoise(u * 2.4, v * 3.1, 31) * 0.055;
+  const k = amount * mottle;
+  return [sr * k, sg * k, sb * k];
 }
 
-function clamp255(v) {
-  return Math.max(0, Math.min(255, Math.round(v)));
-}
+function buildBodyMaps(clay, model) {
+  const { height: H, diameter: D, layerHeight: LH, showLayers } = model;
 
-function buildBodyMaps(preset, model) {
-  const [w, h] = DIMS[model.quality];
-  const { height: H, glazeDip, layerHeight: LH } = model;
-
-  const color = paint(w, h, (u, v) => {
+  const color = paint((u, v) => {
     const y = v * H;
-    const g = outerCoverage(u, y, model);
-    const mix = g * g * (3 - 2 * g);
-    let rgb;
-    if (mix < 0.03) {
-      rgb = clayColorAt(u, v, preset, 0);
-    } else if (mix > 0.97) {
-      rgb = glazeColorAt(u, v, preset);
-    } else {
-      const c = clayColorAt(u, v, preset, mix);
-      const gl = glazeColorAt(u, v, preset);
-      rgb = [c[0] * (1 - mix) + gl[0] * mix, c[1] * (1 - mix) + gl[1] * mix, c[2] * (1 - mix) + gl[2] * mix];
+    const g = outerGlazeCoverage(u, y, H, D);
+    if (g > 0.03) {
+      const wet = wetClay(u, v, clay);
+      const raw = rawClay(u, v, clay);
+      const s = g * g * (3 - 2 * g);
+      return [
+        clamp255(raw[0] * (1 - s) + wet[0] * s),
+        clamp255(raw[1] * (1 - s) + wet[1] * s),
+        clamp255(raw[2] * (1 - s) + wet[2] * s),
+      ];
     }
-    const edge = glazeEdgeFactor(u, y, H, glazeDip);
-    if (edge > 0.01) {
-      const k = 1 - edge * 0.18;
-      rgb = [clamp255(rgb[0] * k), clamp255(rgb[1] * k), clamp255(rgb[2] * k)];
-    }
-    return rgb;
+    return rawClay(u, v, clay).map(clamp255);
   });
 
-  const phys = paint(w, h, (u, v) => {
+  const phys = paint((u, v) => {
     const y = v * H;
-    const g = outerCoverage(u, y, model);
-    const m = g * g * (3 - 2 * g);
-    const raw = 0.93 + pnoise(u, v, 23) * 0.05 + rand(Math.floor(u * 113), Math.floor(v * 89), 2) * 0.025;
-    const smooth = 0.14 + pnoise(u, v, 29) * 0.05 + (rand(Math.floor(u * 149), Math.floor(v * 127), 8) - 0.5) * 0.05;
-    const val = raw * (1 - m) + smooth * m;
-    return [clamp255(g * 255), clamp255(val * 255), 128];
+    const g = outerGlazeCoverage(u, y, H, D);
+    const rawRough = 0.91 + pnoise(u, v, 21) * 0.035 + rand(Math.floor(u * 97), Math.floor(v * 71), 2) * 0.025;
+    const glassRough = 0.055 + pnoise(u, v, 37) * 0.025 + (rand(Math.floor(u * 131), Math.floor(v * 109), 8) - 0.5) * 0.02;
+    const rough = rawRough * (1 - g) + glassRough * g;
+    return [clamp255(g * 255), clamp255(rough * 255), 128];
   });
 
-  const normal = paint(w, h, (u, v) => {
+  const normal = paint((u, v) => {
     const y = v * H;
-    const g = outerCoverage(u, y, model);
-    const rawWeight = 1;
-    const glazedWeight = 0.72;
-    const ampStrength = rawWeight * (1 - g) + glazedWeight * g;
-    let nY = layerSlope(y, model) * ampStrength * 1.45;
+    const g = outerGlazeCoverage(u, y, H, D);
+    const layerWeight = 1 - g * 0.45;
+    let nY = 0;
+    if (showLayers && LH > 0) {
+      const phase = y / LH - 0.5;
+      const d = phase - Math.round(phase);
+      const amp = 0.052 + LH * 0.062;
+      nY = -(amp * Math.PI / LH) * Math.sin(Math.PI * 2 * d);
+      nY *= layerWeight;
+    }
     let nX =
-      (pnoise(u, v, 43) * 0.16 +
-        (rand(Math.floor(u * 199), Math.floor(v * 173), 6) - 0.5) * 0.15) *
+      (pnoise(u, v, 41) * 0.14 +
+        (rand(Math.floor(u * 179), Math.floor(v * 157), 5) - 0.5) * 0.12) *
       (0.35 + g * 0.65);
-    // glaze drips read as soft vertical streaks on the smooth surface
-    const drip = Math.max(0, Math.sin(u * 6.2831 * (9 + Math.floor(v * 20) % 2) + v * 4.5) - 0.83) * 6;
-    nX += drip * g * 0.12;
     nX = Math.min(1, Math.max(-1, nX));
-    nY = Math.min(1, Math.max(-1, nY));
-    const z = Math.sqrt(Math.max(0.04, 1 - nX * nX - nY * nY));
+    nY = Math.min(1, Math.max(-1, nY * 1.25));
+    const z = Math.sqrt(Math.max(0.05, 1 - nX * nX - nY * nY));
     return [(nX * 0.5 + 0.5) * 255, (nY * 0.5 + 0.5) * 255, z * 255];
   });
 
@@ -251,61 +179,47 @@ function buildBodyMaps(preset, model) {
   };
 }
 
-function buildInnerMaps(preset, model) {
-  const [w, h] = DIMS[model.quality];
-  const { height: H, bottomThickness: B } = model;
-  const rimRawMm = Math.max(2.4, H * 0.035);
-
-  const color = paint(w, h, (u, v) => {
-    const y = B + v * (H - B);
-    if (y > H - rimRawMm * 0.55) {
-      return clayColorAt(u, v, preset, 1);
-    }
-    const pooled = 1 - smoothEdge(v, 0, 0.12) * 0.68;
-    const wallVary = 1 + pnoise(u, v, 55) * 0.03;
-    const streak = Math.sin(u * 6.2831 * 8 + v * 31) * 0.025 + 1;
-    return glazeColorAt(u, v, preset, pooled * wallVary * streak);
+function buildInnerMaps(clay, model) {
+  const { height: H } = model;
+  const color = paint((u, v) => {
+    // Fully glazed. The very top of the inner wall is the 1 mm rim glaze.
+    const pooled = 1 - Math.min(1, v / 0.11) * 0.52;
+    const wet = wetClay(u, v, clay, 0.7, 1.42);
+    const streak = 1 + Math.sin(u * 6.2831 * 7 + v * 22) * 0.02;
+    return [
+      clamp255(wet[0] * pooled * streak),
+      clamp255(wet[1] * pooled * streak),
+      clamp255(wet[2] * pooled * streak),
+    ];
   });
-
-  const phys = paint(w, h, (u, v) => {
-    const y = B + v * (H - B);
-    if (y > H - rimRawMm * 0.55) {
-      return [0, 244, 128];
-    }
-    const val = 0.13 + pnoise(u, v, 61) * 0.045 + (rand(Math.floor(u * 127), Math.floor(v * 91), 7) - 0.5) * 0.04;
-    return [255, clamp255(val * 255), 128];
+  const phys = paint((u, v) => {
+    const glassRough = 0.06 + pnoise(u, v, 53) * 0.02;
+    return [255, clamp255(glassRough * 255), 128];
   });
-
-  return {
-    color: toTexture(color, true),
-    phys: toTexture(phys),
-  };
+  return { color: toTexture(color, true), phys: toTexture(phys) };
 }
 
-function buildHandleMaps(preset, model) {
-  const [w, h] = DIMS[model.quality];
-  const color = paint(w, h, (u, v) => {
-    const tickle =
-      Math.sin(u * 6.2831 * 7) * 0.12 +
-      Math.sin(v * 6.2831 * 3.2 + u * 9) * 0.08;
-    const floor = 0.82 + 0.18 * Math.min(1, Math.max(0, 1 - v * 1.7));
-    return glazeColorAt(u, v, preset, (1 + tickle * 0.2) * floor);
+function buildHandleMaps(clay) {
+  const color = paint((u, v) => {
+    const wet = wetClay(u, v, clay, 0.72, 1.36);
+    return [clamp255(wet[0]), clamp255(wet[1]), clamp255(wet[2])];
   });
-  const phys = paint(w, h, (u, v) => {
-    const val = 0.1 + pnoise(u, v, 71) * 0.04 + (rand(Math.floor(u * 89), Math.floor(v * 67), 11) - 0.5) * 0.05;
-    return [255, clamp255(val * 255), 128];
+  const phys = paint((u, v) => {
+    const glassRough = 0.07 + pnoise(u, v, 61) * 0.022;
+    return [255, clamp255(glassRough * 255), 128];
   });
-  return {
-    color: toTexture(color, true),
-    phys: toTexture(phys),
-  };
+  return { color: toTexture(color, true), phys: toTexture(phys) };
 }
 
-export function createCeramicMaps(preset, model) {
+export function getClay(id) {
+  return CLAYS.find((c) => c.id === id) || CLAYS[0];
+}
+
+export function createCeramicMaps(clay, model) {
   return {
-    body: buildBodyMaps(preset, model),
-    inner: buildInnerMaps(preset, model),
-    handle: buildHandleMaps(preset, model),
+    body: buildBodyMaps(clay, model),
+    inner: buildInnerMaps(clay, model),
+    handle: buildHandleMaps(clay),
   };
 }
 

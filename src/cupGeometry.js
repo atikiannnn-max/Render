@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { MEDALLION, medallionCoverage } from "./medallion.js";
 
 /*
  * Procedural cup geometry in millimetres.
@@ -149,6 +150,11 @@ function ringGeometry(opts, inner) {
     }
 
     const lowFreq = 0.018 * Math.sin(y / H * 6.7 + Math.sin(theta * 3 + 1.2) * 1.4);
+    if (!inner) {
+      const surfaceR = R * profileRadiusAt(profile, y / H);
+      const med = medallionCoverage(theta, y, H, surfaceR);
+      if (med > 0) off += MEDALLION.heightMm * med;
+    }
     const a = theta;
     const radius = Math.max(0.5, base + outwardSign * off + lowFreq);
     return [radius * Math.cos(a), y, radius * Math.sin(a)];
