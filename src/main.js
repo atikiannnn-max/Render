@@ -93,7 +93,7 @@ const studioLights = [
   },
   {
     color: 0xffffff,
-    intensity: 0.4,
+    intensity: 0.14,
     width: 700,
     height: 260,
     position: [0, 420, 80],
@@ -101,7 +101,7 @@ const studioLights = [
   },
   {
     color: 0xffffff,
-    intensity: 0.6,
+    intensity: 0.3,
     width: 500,
     height: 360,
     position: [60, 300, -350],
@@ -242,6 +242,18 @@ function loadCup(clay) {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          for (const m of mats) {
+            // The glazed interior must stay darker than the raw outer clay:
+            // lower its diffuse response and mute the bright top-light/environment
+            // reflections that otherwise blow out the cavity.
+            if (m.name?.startsWith("glaze-")) {
+              m.envMapIntensity = 0.22;
+              m.clearcoat = 0.62;
+              m.roughness = Math.max(m.roughness, 0.18);
+              m.color?.multiplyScalar(0.76);
+            }
+          }
           loadedTriangles += child.geometry.index
             ? child.geometry.index.count / 3
             : child.geometry.attributes.position.count / 3;
@@ -333,5 +345,10 @@ window.__renderDebug = {
   },
   get rendererInfo() {
     return renderer.info.render;
+  },
+  lookInside() {
+    camera.position.set(0, 220, 120);
+    controls.target.set(0, 70, 0);
+    controls.update();
   },
 };
