@@ -1,29 +1,19 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { makeCupGeometry, disposeGeometryParts } from "./cupGeometry.js";
-import { createCeramicMaps, disposeMaps, getClay } from "./ceramicTextures.js";
+
+/*
+ * Blender path: the cup and its materials are authored in Blender
+ * (blender/build_cup.py) and exported to GLB + Draco. Three.js is only the
+ * runtime viewer: it loads the asset, lights it and adds studio shadows.
+ */
 
 const stageEl = document.getElementById("stage");
-
-// Everything except the clay is deliberately fixed for now.
-const MODEL = {
-  height: 86,
-  diameter: 74,
-  wallThickness: 4,
-  bottomThickness: 5,
-  layerHeight: 1.0,
-  quality: "medium",
-  shapeKey: "mug",
-  handle: true,
-  showLayers: true,
-};
-
 let clayId = "stone";
-let currentGeometry = null;
-let currentMaps = null;
-
-/* ---------------- renderer / camera ---------------- */
+let loadedObject = null;
+let loadedTriangles = 0;
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -44,7 +34,7 @@ const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerH
 camera.position.set(118, 116, 246);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, MODEL.height * 0.43, 0);
+controls.target.set(0, 36, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 70;
@@ -57,13 +47,7 @@ const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
 scene.environment = envTexture;
 pmrem.dispose();
 
-/*
- * Shadows:
- *  - one real PCF-soft shadow from the key light;
- *  - several layered radial-gradient shadows under the cup. The gradients are
- *    much blurrier than the shadow map, which gives the "several soft shadows"
- *    studio look from the reference.
- */
+// Shadows: real PCF key shadow + wide radial-gradient layers on the floor.
 const keyLight = new THREE.DirectionalLight(0xfff0da, 2.5);
 keyLight.position.set(-185, 250, -165);
 keyLight.castShadow = true;
@@ -82,10 +66,11 @@ const frontRim = new THREE.DirectionalLight(0xcfe2ff, 0.9);
 frontRim.position.set(175, 90, 240);
 scene.add(frontRim);
 
-const fillLight = new THREE.HemisphereLight(0xfff2df, 0x6f6557, 0.5);
+const fillLight = new THREE.HemisphereLight(0xfff2df, 0x6f6557, 0.35);
 scene.add(fillLight);
 
 const cupGroup = new THREE.Group();
+cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
 scene.add(cupGroup);
 
 /* ---------------- studio backdrop ---------------- */
@@ -109,11 +94,7 @@ function gradientTexture() {
 
 const backdrop = new THREE.Mesh(
   new THREE.CylinderGeometry(1500, 1500, 2600, 48, 1, true),
-  new THREE.MeshBasicMaterial({
-    map: gradientTexture(),
-    side: THREE.BackSide,
-    depthWrite: false,
-  })
+  new THREE.MeshBasicMaterial({ map: gradientTexture(), side: THREE.BackSide, depthWrite: false })
 );
 backdrop.position.y = 680;
 backdrop.frustumCulled = false;
@@ -143,7 +124,7 @@ function softShadowTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-function addShadowBlob(x, z, sx, sz, opacity, scale = 1) {
+function addShadowBlob(x, z, sx, sz, opacity) {
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({
@@ -153,93 +134,69 @@ function addShadowBlob(x, z, sx, sz, opacity, scale = 1) {
       depthWrite: false,
     })
   );
-  mesh.position.set(x * scale, -0.04, z * scale);
-  mesh.scale.set(sx * scale, sz * scale, 1);
+  mesh.position.set(x, -0.04, z);
+  mesh.scale.set(sx, sz, 1);
   mesh.renderOrder = 1;
   scene.add(mesh);
 }
 
-// Contact shadow + two wider offset shadows = the layered soft look.
 addShadowBlob(0, 0, 92, 92, 0.4);
 addShadowBlob(30, 19, 125, 92, 0.24);
 addShadowBlob(-36, -10, 175, 120, 0.14);
 
-/* ---------------- materials ---------------- */
+/* ---------------- GLB loading ---------------- */
 
-function buildMaterials(maps) {
-  const body = new THREE.MeshPhysicalMaterial({
-    map: maps.body.color,
-    roughnessMap: maps.body.phys,
-    clearcoat: 1,
-    clearcoatMap: maps.body.phys,
-    clearcoatRoughness: 0.1,
-    normalMap: maps.body.normal,
-    roughness: 1,
-    metalness: 0,
-    envMapIntensity: 0.95,
-  });
+const draco = new DRACOLoader();
+draco.setDecoderPath(new URL("draco/", window.location.href).href);
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
 
-  const glazed = new THREE.MeshPhysicalMaterial({
-    map: maps.inner.color,
-    roughnessMap: maps.inner.phys,
-    clearcoat: 1,
-    clearcoatMap: maps.inner.phys,
-    clearcoatRoughness: 0.12,
-    roughness: 1,
-    metalness: 0,
-    envMapIntensity: 1.15,
-  });
-
-  const handle = new THREE.MeshPhysicalMaterial({
-    map: maps.handle.color,
-    roughnessMap: maps.handle.phys,
-    clearcoat: 1,
-    clearcoatMap: maps.handle.phys,
-    clearcoatRoughness: 0.1,
-    roughness: 1,
-    metalness: 0,
-    envMapIntensity: 1.2,
-  });
-
-  return { body, glazed, handle };
-}
-
-function clearCupGroup() {
-  while (cupGroup.children.length) {
-    const mesh = cupGroup.children[0];
-    cupGroup.remove(mesh);
-    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) m.dispose();
+function disposeLoaded() {
+  if (loadedObject) {
+    loadedObject.traverse((child) => {
+      if (child.isMesh) {
+        child.geometry?.dispose();
+        for (const m of Array.isArray(child.material) ? child.material : [child.material]) {
+          m?.dispose?.();
+        }
+      }
+    });
+    cupGroup.remove(loadedObject);
+    loadedObject = null;
   }
-  if (currentGeometry) disposeGeometryParts(currentGeometry);
-  if (currentMaps) disposeMaps(currentMaps);
-  currentGeometry = null;
-  currentMaps = null;
+  loadedTriangles = 0;
 }
 
-function rebuildCup() {
-  clearCupGroup();
-  const clay = getClay(clayId);
-  const start = performance.now();
-  currentGeometry = makeCupGeometry(MODEL);
-  currentMaps = createCeramicMaps(clay, MODEL);
-  const mats = buildMaterials(currentMaps);
-
-  const { outer, rim, bottom, inner, floor, handle } = currentGeometry;
-  const add = (geo, mat, cast = true) => {
-    if (!geo) return;
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = cast;
-    mesh.receiveShadow = true;
-    cupGroup.add(mesh);
-  };
-
-  add(outer, mats.body);
-  add(rim, mats.body);
-  add(bottom, mats.body);
-  add(inner, mats.glazed);
-  add(floor, mats.glazed);
-  add(handle, mats.handle);
-  console.info(`[render] ${(currentGeometry.triCount / 1000).toFixed(0)}k tris · ${(performance.now() - start).toFixed(0)} ms`);
+function loadCup(clay) {
+  disposeLoaded();
+  const url = new URL(`models/cup-${clay}.glb`, window.location.href).href;
+  loader.load(
+    url,
+    (gltf) => {
+      const root = gltf.scene;
+      root.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (clay === "stone") {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            for (const m of materials) {
+              // Keep the light clay readable against the light studio backdrop.
+              m.color?.multiplyScalar(0.76);
+            }
+          }
+          loadedTriangles += child.geometry.index
+            ? child.geometry.index.count / 3
+            : child.geometry.attributes.position.count / 3;
+        }
+      });
+      loadedObject = root;
+      cupGroup.add(root);
+      console.info(`[render] Blender GLB ${clay} · ${Math.round(loadedTriangles / 1000)}k tris`);
+    },
+    undefined,
+    (err) => console.error("[render] GLB load failed", err)
+  );
 }
 
 /* ---------------- clay picker ---------------- */
@@ -249,13 +206,13 @@ document.querySelectorAll(".clay-btn").forEach((btn) => {
     if (btn.dataset.clay === clayId) return;
     clayId = btn.dataset.clay;
     document.querySelectorAll(".clay-btn").forEach((b) => b.classList.toggle("active", b === btn));
-    rebuildCup();
+    loadCup(clayId);
   });
 });
 
 renderer.domElement.addEventListener("dblclick", () => {
   camera.position.set(118, 116, 246);
-  controls.target.set(0, MODEL.height * 0.43, 0);
+  controls.target.set(0, 36, 0);
 });
 
 window.addEventListener("resize", () => {
@@ -269,18 +226,53 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-requestAnimationFrame(rebuildCup);
+requestAnimationFrame(() => loadCup(clayId));
 
 // Debug hook used by automated QA only.
 window.__renderDebug = {
-  get triangles() {
-    return currentGeometry?.triCount || 0;
+  get loaded() {
+    return !!loadedObject;
   },
-  get maps() {
-    return !!currentMaps;
+  get triangles() {
+    return Math.round(loadedTriangles);
   },
   get clay() {
     return clayId;
+  },
+  get bbox() {
+    if (!loadedObject) return null;
+    const box = new THREE.Box3().setFromObject(cupGroup);
+    return {
+      min: [box.min.x, box.min.y, box.min.z],
+      max: [box.max.x, box.max.y, box.max.z],
+    };
+  },
+  get materials() {
+    const out = [];
+    loadedObject?.traverse?.((child) => {
+      if (!child.isMesh) return;
+      for (const m of Array.isArray(child.material) ? child.material : [child.material]) {
+        out.push({
+          name: m.name,
+          color: m.color ? `#${m.color.getHexString()}` : null,
+          map: !!m.map,
+          roughness: m.roughness,
+          clearcoat: m.clearcoat,
+        });
+      }
+    });
+    return out;
+  },
+  get screenProjection() {
+    if (!loadedObject) return null;
+    const box = new THREE.Box3().setFromObject(cupGroup);
+    const c = box.getCenter(new THREE.Vector3());
+    const v = c.clone();
+    const clipped = v.project(camera);
+    return {
+      center: [v.x, v.y, v.z],
+      clipped: [clipped.x, clipped.y, clipped.z],
+    };
   },
   get rendererInfo() {
     return renderer.info.render;

@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "blender:stone": "\"/Applications/Blender.app/Contents/MacOS/Blender\" -b -y --python blender/build_cup.py -- --clay stone",
+    "blender:asphalt": "\"/Applications/Blender.app/Contents/MacOS/Blender\" -b -y --python blender/build_cup.py -- --clay asphalt"
   },
   "dependencies": {
     "three": "^0.169.0"
