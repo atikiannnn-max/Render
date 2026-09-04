@@ -40,7 +40,7 @@ PROFILE = [
 MEDALLION_ANGLE = 1.075
 MEDALLION_Y_FRAC = 0.56
 MEDALLION_RADIUS = 14.0
-MEDALLION_HEIGHT = 0.52
+MEDALLION_HEIGHT = 1.8
 
 CLAYS = {
     "stone": {"name": "Stone", "rgb": (198, 188, 168)},
@@ -195,10 +195,9 @@ def clamp255(v):
 
 
 def glaze_cover(u, y, H_):
-    top = 1 if y > H_ - 1.0 else 0
     r = D / 2 * profile_radius(y / H_)
-    relief = medallion_coverage(u * math.pi * 2, y, r)
-    return max(top, relief)
+    # Only the exterior relief is glazed. The outer wall itself stays raw clay.
+    return medallion_coverage(u * math.pi * 2, y, r)
 
 
 def build_body_textures(clay_id, out_dir):
