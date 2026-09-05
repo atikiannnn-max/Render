@@ -55,10 +55,10 @@ pmrem.dispose();
  *  - broad cool fill right/front, 25-40% of key;
  *  - weak overhead source for the rim/interior.
  *
- * Area lights cannot cast shadow maps in three.js, so each large source gets a
- * low-intensity directional "shadow carrier" with a big PCF radius. Several
- * overlapping carriers produce the blurred, softbox-like penumbra instead of a
- * single hard shadow.
+ * Area lights cannot cast shadow maps in three.js. One low-intensity
+ * directional "shadow carrier" follows the key softbox and produces the
+ * geometric shadow; a high-res shadow map plus a wide PCF radius keeps it
+ * diffuse instead of graphic.
  */
 RectAreaLightUniformsLib.init();
 
@@ -97,26 +97,20 @@ for (const cfg of studioLights) {
   scene.add(light);
 }
 
-const carrierConfigs = [
-  { color: 0xfffaf2, intensity: 0.3, size: 2048, radius: 20, position: [-300, 330, 170] },
-  { color: 0xf8fafb, intensity: 0.12, size: 1024, radius: 24, position: [300, 190, 310] },
-  { color: 0xffffff, intensity: 0.05, size: 1024, radius: 28, position: [0, 420, 80] },
-];
-for (const c of carrierConfigs) {
-  const dir = new THREE.DirectionalLight(c.color, c.intensity);
-  dir.position.set(...c.position);
-  dir.castShadow = true;
-  dir.shadow.mapSize.set(c.size, c.size);
-  dir.shadow.camera.near = 10;
-  dir.shadow.camera.far = 900;
-  dir.shadow.camera.left = -240;
-  dir.shadow.camera.right = 240;
-  dir.shadow.camera.top = 240;
-  dir.shadow.camera.bottom = -240;
-  dir.shadow.bias = -0.00015;
-  dir.shadow.radius = c.radius;
-  scene.add(dir);
-}
+const shadowCarrier = new THREE.DirectionalLight(0xfffaf2, 0.55);
+shadowCarrier.position.set(-300, 330, 170);
+shadowCarrier.castShadow = true;
+shadowCarrier.shadow.mapSize.set(4096, 4096);
+shadowCarrier.shadow.camera.near = 10;
+shadowCarrier.shadow.camera.far = 900;
+shadowCarrier.shadow.camera.left = -150;
+shadowCarrier.shadow.camera.right = 150;
+shadowCarrier.shadow.camera.top = 150;
+shadowCarrier.shadow.camera.bottom = -150;
+shadowCarrier.shadow.bias = -0.00008;
+shadowCarrier.shadow.normalBias = 0.02;
+shadowCarrier.shadow.radius = 35;
+scene.add(shadowCarrier);
 
 const cupGroup = new THREE.Group();
 cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
@@ -130,8 +124,8 @@ scene.add(cupGroup);
  */
 
 const shadowCatcher = new THREE.Mesh(
-  new THREE.PlaneGeometry(260, 260).rotateX(-Math.PI / 2),
-  new THREE.ShadowMaterial({ opacity: 0.65 })
+  new THREE.PlaneGeometry(760, 760).rotateX(-Math.PI / 2),
+  new THREE.ShadowMaterial({ opacity: 0.6 })
 );
 shadowCatcher.position.y = -0.15;
 shadowCatcher.receiveShadow = true;
