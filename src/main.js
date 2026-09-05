@@ -122,94 +122,20 @@ const cupGroup = new THREE.Group();
 cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
 scene.add(cupGroup);
 
-/* ---------------- seamless curved cyclorama ---------------- */
+/* ---------------- seamless CSS studio backdrop ---------------- */
+/*
+ * The WebGL canvas is transparent. There is no floor/wall mesh at all, so no
+ * horizon or edge can appear. Real shadow maps are caught by an invisible
+ * ShadowMaterial plane, which darkens the CSS backdrop only where shadows fall.
+ */
 
-const cycloramaMat = new THREE.MeshStandardMaterial({
-  color: 0x9b9894,
-  roughness: 0.94,
-  metalness: 0,
-  vertexColors: true,
-  envMapIntensity: 0.12,
-});
-
-function buildCyclorama() {
-  // Cross-section (Y,Z): floor -> 90° fillet -> back wall, all one surface.
-  const floorFront = 1600;
-  const cornerStart = -1050;
-  const wallZ = -1350;
-  const filletR = 300;
-  const wallTop = 1700;
-  const halfWidth = 2300;
-  const xSegs = 5;
-  const pts = [];
-
-  // Floor samples.
-  const floorSegs = 36;
-  for (let i = 0; i <= floorSegs; i++) {
-    const t = i / floorSegs;
-    pts.push([floorFront + (cornerStart - floorFront) * t, 0]);
-  }
-  // Fillet: quarter circle centred at (cornerStart, 0), ending at back wall.
-  const filletSegs = 24;
-  for (let i = 1; i <= filletSegs; i++) {
-    const s = (i / filletSegs) * Math.PI * 0.5;
-    pts.push([cornerStart - filletR * Math.sin(s), filletR * (1 - Math.cos(s))]);
-  }
-  // Back wall.
-  const wallSegs = 26;
-  for (let i = 1; i <= wallSegs; i++) {
-    const t = i / wallSegs;
-    pts.push([wallZ, filletR + (wallTop - filletR) * t]);
-  }
-
-  const positions = [];
-  const colors = [];
-  const index = [];
-  // Lighting hits the horizontal floor harder than the back wall, so each
-  // profile point gets a soft baked light-response factor. No separate
-  // material or painted shadow: it is still one continuous cyclorama.
-  const ptFactor = new Array(pts.length).fill(0.9);
-  const floorCount = 1 + floorSegs;
-  for (let i = 0; i < floorCount; i++) ptFactor[i] = 0.44 + 0.08 * (i / floorSegs);
-  const wallStart = floorCount + filletSegs;
-  for (let i = 1; i <= filletSegs; i++) {
-    const t = i / filletSegs;
-    ptFactor[floorCount + i - 1] = 0.52 + 0.3 * t;
-  }
-  for (let i = 0; i < wallSegs; i++) {
-    ptFactor[wallStart + i] = 0.82 + 0.12 * (i / Math.max(1, wallSegs - 1));
-  }
-  for (let xi = 0; xi <= xSegs; xi++) {
-    const x = -halfWidth + (2 * halfWidth * xi) / xSegs;
-    for (let pi = 0; pi < pts.length; pi++) {
-      positions.push(x, pts[pi][1], pts[pi][0]);
-      const f = ptFactor[pi];
-      colors.push(f, f, f);
-    }
-  }
-  const stride = pts.length;
-  for (let xi = 0; xi < xSegs; xi++) {
-    for (let pi = 0; pi < stride - 1; pi++) {
-      const a = xi * stride + pi;
-      const b = (xi + 1) * stride + pi;
-      const c = (xi + 1) * stride + pi + 1;
-      const d = xi * stride + pi + 1;
-      index.push(a, b, c, a, c, d);
-    }
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-  geometry.setIndex(index);
-  geometry.computeVertexNormals();
-  const mesh = new THREE.Mesh(geometry, cycloramaMat);
-  mesh.receiveShadow = true;
-  mesh.frustumCulled = false;
-  scene.add(mesh);
-}
-
-buildCyclorama();
+const shadowCatcher = new THREE.Mesh(
+  new THREE.PlaneGeometry(260, 260).rotateX(-Math.PI / 2),
+  new THREE.ShadowMaterial({ opacity: 0.65 })
+);
+shadowCatcher.position.y = -0.15;
+shadowCatcher.receiveShadow = true;
+scene.add(shadowCatcher);
 
 /* ---------------- GLB loading ---------------- */
 
