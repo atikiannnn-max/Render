@@ -148,7 +148,7 @@ shadowCarrier.shadow.bias = -0.00008;
 shadowCarrier.shadow.normalBias = 0.02;
 shadowCarrier.shadow.radius = 16;
 shadowCarrier.shadow.blurSamples = 24;
-shadowCarrier.shadow.intensity = 1.15;
+shadowCarrier.shadow.intensity = 1.38; // +20% darker falling shadow
 scene.add(shadowCarrier);
 
 // A narrower, less blurred carrier from the same direction gives the natural
@@ -185,7 +185,7 @@ broadShadow.shadow.bias = -0.00008;
 broadShadow.shadow.normalBias = 0.02;
 broadShadow.shadow.radius = 26;
 broadShadow.shadow.blurSamples = 32;
-broadShadow.shadow.intensity = 0.9;
+broadShadow.shadow.intensity = 1.08; // +20% darker wide falloff
 scene.add(broadShadow);
 
 const cupGroup = new THREE.Group();
@@ -232,11 +232,11 @@ function velvetRoughnessTexture() {
     for (let x = 0; x < s; x++) {
       const u = x / s;
       const v = y / s;
-      const fibre = hash(Math.floor(u * 190), Math.floor(v * 170), 3);
-      const longFibre = Math.sin(y * 0.78 + Math.sin(u * 47.0) * 0.4) * 8;
-      const blotch = Math.sin(u * 7.3 + v * 5.1) * 8;
-      // Visible but still matte fibre drift: roughness channel around 0.6-0.95.
-      const val = 205 + (fibre - 0.5) * 90 + longFibre + blotch;
+      const fibre = hash(Math.floor(u * 130), Math.floor(v * 120), 3);
+      const longFibre = Math.sin(y * 0.55 + Math.sin(u * 31.0) * 0.35) * 5;
+      const blotch = Math.sin(u * 5.3 + v * 3.8) * 5;
+      // Gentle fibre drift that stays matte.
+      const val = 222 + (fibre - 0.5) * 34 + longFibre + blotch;
       const i = (y * s + x) * 4;
       const c0 = Math.min(250, Math.max(130, val));
       img.data[i] = c0;
@@ -263,7 +263,7 @@ const paperMat = new THREE.MeshPhysicalMaterial({
   alphaMap: velvetAlphaTexture(),
   roughnessMap: velvetRoughnessTexture(),
   bumpMap: velvetRoughnessTexture(),
-  bumpScale: 1.6,
+  bumpScale: 0.45,
   transparent: true,
 });
 
