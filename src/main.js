@@ -315,18 +315,21 @@ function loadCup(clay) {
           if (m) m.material = clayMatte;
         }
 
-        const GLASS_TINT = new THREE.Color(0x4b463f);
+        // Clear glaze darkens the clay roughly 2x — it must not become black
+        // on light clay. Tint is derived per clay variant.
+        const GLASS_TINT =
+          clay === "stone" ? new THREE.Color(0x807a6e) : new THREE.Color(0x3b3d3d);
         const glassMat = new THREE.MeshPhysicalMaterial({
           color: GLASS_TINT,
-          transmission: 0.72,
+          transmission: 0.55,
           thickness: 0.00035,
           attenuationColor: GLASS_TINT.clone().multiplyScalar(1.15),
-          attenuationDistance: 0.002,
-          roughness: 0.1,
+          attenuationDistance: 0.02,
+          roughness: 0.16,
           ior: 1.45,
           clearcoat: 1,
-          clearcoatRoughness: 0.08,
-          envMapIntensity: 2.2,
+          clearcoatRoughness: 0.14,
+          envMapIntensity: 0.9,
           transparent: true,
           side: THREE.DoubleSide,
         });
