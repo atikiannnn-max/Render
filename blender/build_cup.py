@@ -27,14 +27,13 @@ import bpy
 
 H = 86.0       # cup height
 D = 74.0       # cup diameter
-T = 4.0        # wall thickness
+T = 1.5        # wall thickness
 B = 5.0        # bottom thickness
 LH = 1.0       # printed layer height
 
 PROFILE = [
-    (0.0, 0.975), (0.045, 1.02), (0.14, 0.99), (0.35, 0.995),
-    (0.62, 0.985), (0.8, 0.955), (0.91, 0.955), (0.965, 0.99),
-    (1.0, 1.012),
+    (0.0, 1.0),
+    (1.0, 1.0),
 ]
 
 MEDALLION_ANGLE = 1.075
@@ -510,7 +509,6 @@ def main():
     floor.data.materials.append(glaze_mat)
 
     rim_cap("rim-cap", body_mat)
-    handle("handle", body_mat)
 
     # Blender is unit-neutral here; the mesh was authored in millimetres, so
     # bring it down to GLTF metres and bake the transform into the mesh.
