@@ -117,20 +117,51 @@ const cupGroup = new THREE.Group();
 cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
 scene.add(cupGroup);
 
-/* ---------------- seamless CSS studio backdrop ---------------- */
+/* ---------------- matte velvet paper floor ---------------- */
 /*
- * The WebGL canvas is transparent. There is no floor/wall mesh at all, so no
- * horizon or edge can appear. Real shadow maps are caught by an invisible
- * ShadowMaterial plane, which darkens the CSS backdrop only where shadows fall.
+ * The visible receiver is a soft, velvet-like paper disc: roughness 1, no
+ * reflection, high sheen. It receives the blurred VSM shadow and slowly fades
+ * into the CSS backdrop, so there is no hard floor edge or horizon.
  */
 
-const shadowCatcher = new THREE.Mesh(
-  new THREE.PlaneGeometry(760, 760).rotateX(-Math.PI / 2),
-  new THREE.ShadowMaterial({ opacity: 0.6 })
+function velvetAlphaTexture() {
+  const s = 1024;
+  const c = document.createElement("canvas");
+  c.width = s;
+  c.height = s;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  g.addColorStop(0, "rgb(255,255,255)");
+  g.addColorStop(0.55, "rgb(255,255,255)");
+  g.addColorStop(0.8, "rgb(244,244,244)");
+  g.addColorStop(1, "rgb(0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
+
+const paperMat = new THREE.MeshPhysicalMaterial({
+  color: 0x8d8b86,
+  roughness: 1,
+  metalness: 0,
+  sheen: 1,
+  sheenColor: 0x999690,
+  sheenRoughness: 1,
+  clearcoat: 0,
+  envMapIntensity: 0,
+  alphaMap: velvetAlphaTexture(),
+  transparent: true,
+});
+
+const paperFloor = new THREE.Mesh(
+  new THREE.CircleGeometry(1800, 96).rotateX(-Math.PI / 2),
+  paperMat
 );
-shadowCatcher.position.y = -0.15;
-shadowCatcher.receiveShadow = true;
-scene.add(shadowCatcher);
+paperFloor.position.y = -0.08;
+paperFloor.receiveShadow = true;
+scene.add(paperFloor);
 
 /* ---------------- GLB loading ---------------- */
 
