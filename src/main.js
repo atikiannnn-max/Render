@@ -146,9 +146,9 @@ shadowCarrier.shadow.camera.top = 150;
 shadowCarrier.shadow.camera.bottom = -150;
 shadowCarrier.shadow.bias = -0.00008;
 shadowCarrier.shadow.normalBias = 0.02;
-shadowCarrier.shadow.radius = 8;
-shadowCarrier.shadow.blurSamples = 16;
-shadowCarrier.shadow.intensity = 1.25; // ~20% darker than before
+shadowCarrier.shadow.radius = 16;
+shadowCarrier.shadow.blurSamples = 24;
+shadowCarrier.shadow.intensity = 1.15;
 scene.add(shadowCarrier);
 
 // A narrower, less blurred carrier from the same direction gives the natural
@@ -167,8 +167,26 @@ contactCarrier.shadow.bias = -0.00008;
 contactCarrier.shadow.normalBias = 0.02;
 contactCarrier.shadow.radius = 2.2;
 contactCarrier.shadow.blurSamples = 8;
-contactCarrier.shadow.intensity = 1.0;
+contactCarrier.shadow.intensity = 1.6; // contact/AO ~60% darker
 scene.add(contactCarrier);
+
+// A second, very strongly blurred shadow layer adds broad diffuse falloff.
+const broadShadow = new THREE.DirectionalLight(0xfffbf4, 0.07);
+broadShadow.position.set(-300, 330, 170);
+broadShadow.castShadow = true;
+broadShadow.shadow.mapSize.set(1024, 1024);
+broadShadow.shadow.camera.near = 10;
+broadShadow.shadow.camera.far = 900;
+broadShadow.shadow.camera.left = -240;
+broadShadow.shadow.camera.right = 240;
+broadShadow.shadow.camera.top = 240;
+broadShadow.shadow.camera.bottom = -240;
+broadShadow.shadow.bias = -0.00008;
+broadShadow.shadow.normalBias = 0.02;
+broadShadow.shadow.radius = 26;
+broadShadow.shadow.blurSamples = 32;
+broadShadow.shadow.intensity = 0.9;
+scene.add(broadShadow);
 
 const cupGroup = new THREE.Group();
 cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
@@ -206,18 +224,24 @@ function velvetRoughnessTexture() {
   c.height = s;
   const ctx = c.getContext("2d");
   const img = ctx.createImageData(s, s);
+  const hash = (x, y, seed) => {
+    const v = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
+    return v - Math.floor(v);
+  };
   for (let y = 0; y < s; y++) {
     for (let x = 0; x < s; x++) {
       const u = x / s;
       const v = y / s;
-      const noise =
-        Math.sin(u * 31.4 + v * 9.1) * 0.5 +
-        Math.sin(u * 8.2 + v * 27.3) * 0.5;
-      const val = 232 + noise * 8; // 0.91–0.94 rough, subtle fibre drift
+      const fibre = hash(Math.floor(u * 190), Math.floor(v * 170), 3);
+      const longFibre = Math.sin(y * 0.78 + Math.sin(u * 47.0) * 0.4) * 8;
+      const blotch = Math.sin(u * 7.3 + v * 5.1) * 8;
+      // Visible but still matte fibre drift: roughness channel around 0.6-0.95.
+      const val = 205 + (fibre - 0.5) * 90 + longFibre + blotch;
       const i = (y * s + x) * 4;
-      img.data[i] = val;
-      img.data[i + 1] = val;
-      img.data[i + 2] = val;
+      const c0 = Math.min(250, Math.max(130, val));
+      img.data[i] = c0;
+      img.data[i + 1] = c0;
+      img.data[i + 2] = c0;
       img.data[i + 3] = 255;
     }
   }
@@ -238,6 +262,8 @@ const paperMat = new THREE.MeshPhysicalMaterial({
   envMapIntensity: 0,
   alphaMap: velvetAlphaTexture(),
   roughnessMap: velvetRoughnessTexture(),
+  bumpMap: velvetRoughnessTexture(),
+  bumpScale: 1.6,
   transparent: true,
 });
 
