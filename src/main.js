@@ -24,7 +24,7 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.VSMShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.AgXToneMapping;
 renderer.toneMappingExposure = 0.9;
@@ -57,8 +57,8 @@ pmrem.dispose();
  *
  * Area lights cannot cast shadow maps in three.js. One low-intensity
  * directional "shadow carrier" follows the key softbox and produces the
- * geometric shadow; a high-res shadow map plus a wide PCF radius keeps it
- * diffuse instead of graphic.
+ * geometric shadow. VSM shadow maps apply a real Gaussian blur to the shadow
+ * depth buffer, which keeps the falloff diffuse instead of graphic.
  */
 RectAreaLightUniformsLib.init();
 
@@ -100,7 +100,7 @@ for (const cfg of studioLights) {
 const shadowCarrier = new THREE.DirectionalLight(0xfffaf2, 0.55);
 shadowCarrier.position.set(-300, 330, 170);
 shadowCarrier.castShadow = true;
-shadowCarrier.shadow.mapSize.set(4096, 4096);
+shadowCarrier.shadow.mapSize.set(2048, 2048);
 shadowCarrier.shadow.camera.near = 10;
 shadowCarrier.shadow.camera.far = 900;
 shadowCarrier.shadow.camera.left = -150;
@@ -109,7 +109,8 @@ shadowCarrier.shadow.camera.top = 150;
 shadowCarrier.shadow.camera.bottom = -150;
 shadowCarrier.shadow.bias = -0.00008;
 shadowCarrier.shadow.normalBias = 0.02;
-shadowCarrier.shadow.radius = 35;
+shadowCarrier.shadow.radius = 8;
+shadowCarrier.shadow.blurSamples = 16;
 scene.add(shadowCarrier);
 
 const cupGroup = new THREE.Group();
