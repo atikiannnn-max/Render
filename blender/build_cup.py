@@ -170,9 +170,12 @@ def rand(u, v, seed=0):
 
 def clay_speckle(u, v, clay_rgb):
     r, g, b = clay_rgb
-    # Delicate, slightly mottled fired clay. No hard pixel speckles.
-    grain = pnoise(u, v, 13) * 0.018
-    f = min(1.05, max(0.96, 1 + grain))
+    # Delicate, slightly mottled fired clay. A tiny periodic term follows the
+    # printed layer pitch so adjacent rows differ a hair, plus low-frequency
+    # mineral variation. No hard pixel speckles.
+    layer = 0.006 * math.sin(v * (H / LH) * math.pi * 2 + 1.7)
+    grain = layer + pnoise(u, v, 13) * 0.012 + pnoise(u * 3.1, v * 4.2, 7) * 0.009
+    f = min(1.05, max(0.95, 1 + grain))
     return (r * f, g * f, b * f)
 
 

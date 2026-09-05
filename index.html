@@ -33,6 +33,16 @@
       #stage { position: fixed; inset: 0; }
       canvas { display: block; }
 
+      .post { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+      .soft-vignette {
+        position: absolute; inset: 0;
+        background: radial-gradient(115% 95% at 50% 44%, transparent 68%, rgba(35,28,21,0.11) 100%);
+      }
+      .grain {
+        position: absolute; inset: -60px;
+        opacity: 0.035;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+      }
       .ui-frame { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
       .vignette {
         position: absolute; inset: 0;
@@ -113,6 +123,10 @@
   </head>
   <body>
     <div id="stage"></div>
+    <div class="post">
+      <div class="soft-vignette"></div>
+      <div class="grain"></div>
+    </div>
 
     <div class="ui-frame">
       <div class="vignette"></div>

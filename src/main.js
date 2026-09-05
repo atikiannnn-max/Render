@@ -2,7 +2,6 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 
 /*
@@ -31,11 +30,11 @@ renderer.toneMappingExposure = 0.9;
 stageEl.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(24, window.innerWidth / window.innerHeight, 1, 4000);
-camera.position.set(112, 76, 282);
+const camera = new THREE.PerspectiveCamera(22, window.innerWidth / window.innerHeight, 1, 4000);
+camera.position.set(96, 80, 272);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 40, 0);
+controls.target.set(0, 43, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 70;
@@ -43,11 +42,49 @@ controls.maxDistance = 560;
 controls.maxPolarAngle = 1.52;
 controls.update();
 
-const pmrem = new THREE.PMREMGenerator(renderer);
-const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.035).texture;
-scene.environment = envTexture;
-scene.environmentIntensity = 0.18;
-pmrem.dispose();
+/*
+ * Studio environment: large rectangular emissive softboxes are baked into a
+ * PMREM map, so glaze reflections are long rectangles (like studio HDR),
+ * not a generic room.
+ */
+function createStudioEnvironment(renderer) {
+  const envScene = new THREE.Scene();
+  const roomMat = new THREE.MeshBasicMaterial({ color: 0x2c2b29, side: THREE.BackSide });
+  const room = new THREE.Mesh(new THREE.BoxGeometry(18, 11, 18), roomMat);
+  envScene.add(room);
+
+  const panels = [
+    { color: 0xffffff, w: 5.2, h: 3.8, pos: [-3.4, 3.4, 2.0] },
+    { color: 0xffffff, w: 4.0, h: 2.6, pos: [3.4, 2.0, 3.6] },
+    { color: 0xffffff, w: 6.5, h: 1.8, pos: [0, 5.1, 0.8] },
+    { color: 0xffffff, w: 4.4, h: 2.8, pos: [0.6, 3.2, -4.5] },
+  ];
+  for (const p of panels) {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(p.w, p.h),
+      new THREE.MeshBasicMaterial({ color: p.color })
+    );
+    mesh.position.set(...p.pos);
+    mesh.lookAt(0, 0.4, 0);
+    envScene.add(mesh);
+  }
+
+  // Matte floor/walls keep panels as the only bright reflection shapes.
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(18, 18).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x3c3b38, side: THREE.DoubleSide })
+  );
+  floor.position.y = -5;
+  envScene.add(floor);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const tex = pmrem.fromScene(envScene, 0.05).texture;
+  pmrem.dispose();
+  return tex;
+}
+
+scene.environment = createStudioEnvironment(renderer);
+scene.environmentIntensity = 0.32;
 
 /*
  * Studio lighting, not a single source:
@@ -162,6 +199,34 @@ function velvetAlphaTexture() {
   return t;
 }
 
+function velvetRoughnessTexture() {
+  const s = 512;
+  const c = document.createElement("canvas");
+  c.width = s;
+  c.height = s;
+  const ctx = c.getContext("2d");
+  const img = ctx.createImageData(s, s);
+  for (let y = 0; y < s; y++) {
+    for (let x = 0; x < s; x++) {
+      const u = x / s;
+      const v = y / s;
+      const noise =
+        Math.sin(u * 31.4 + v * 9.1) * 0.5 +
+        Math.sin(u * 8.2 + v * 27.3) * 0.5;
+      const val = 232 + noise * 8; // 0.91–0.94 rough, subtle fibre drift
+      const i = (y * s + x) * 4;
+      img.data[i] = val;
+      img.data[i + 1] = val;
+      img.data[i + 2] = val;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
+
 const paperMat = new THREE.MeshPhysicalMaterial({
   color: 0x8d8b86,
   roughness: 1,
@@ -172,6 +237,7 @@ const paperMat = new THREE.MeshPhysicalMaterial({
   clearcoat: 0,
   envMapIntensity: 0,
   alphaMap: velvetAlphaTexture(),
+  roughnessMap: velvetRoughnessTexture(),
   transparent: true,
 });
 
@@ -366,8 +432,8 @@ document.querySelectorAll(".clay-btn").forEach((btn) => {
 });
 
 renderer.domElement.addEventListener("dblclick", () => {
-  camera.position.set(112, 76, 282);
-  controls.target.set(0, 40, 0);
+  camera.position.set(96, 80, 272);
+  controls.target.set(0, 43, 0);
 });
 
 window.addEventListener("resize", () => {
