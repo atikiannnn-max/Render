@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Render — глазурованная керамика</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23c9c1af'/%3E%3Ccircle cx='16' cy='14' r='5' fill='%237c7463'/%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        --ink: #2b2620;
+        --muted: rgba(43, 38, 32, 0.58);
+        --line: rgba(43, 38, 32, 0.14);
+        --glass: rgba(255, 252, 245, 0.76);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        color: var(--ink);
+        overflow: hidden;
+        background:
+          radial-gradient(135% 115% at 50% 45%, #9d9b95 0%, #8f8d88 50%, #817f7b 100%);
+      }
+      #stage { position: fixed; inset: 0; }
+      canvas { display: block; }
+
+      .post { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+      .soft-vignette {
+        position: absolute; inset: 0;
+        background: radial-gradient(115% 95% at 50% 44%, transparent 68%, rgba(35,28,21,0.11) 100%);
+      }
+      .grain {
+        position: absolute; inset: -60px;
+        opacity: 0.035;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+      }
+      .ui-frame { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+      .vignette {
+        position: absolute; inset: 0;
+        background: radial-gradient(88% 74% at 50% 42%, transparent 60%, rgba(42, 32, 20, 0.13) 100%);
+      }
+      .brand {
+        position: absolute; top: 22px; left: 26px;
+        display: flex; align-items: center; gap: 10px;
+        user-select: none;
+      }
+      .brand .dot {
+        width: 10px; height: 10px; border-radius: 50%;
+        background: linear-gradient(145deg, #ded5c3, #8d8371);
+        box-shadow: inset 0 -2px 3px rgba(0,0,0,.18);
+      }
+      .brand b { font-weight: 600; letter-spacing: .02em; }
+      .brand small { color: var(--muted); margin-left: 2px; }
+
+      .clay-picker {
+        position: absolute;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 6px;
+        padding: 5px;
+        background: var(--glass);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 14px 38px rgba(46, 35, 20, 0.13);
+        pointer-events: auto;
+      }
+      .clay-btn {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        color: #54493a;
+        padding: 8px 13px 8px 9px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background .14s ease, color .14s ease;
+      }
+      .clay-btn:hover { background: rgba(255,255,255,.5); color: var(--ink); }
+      .clay-btn.active {
+        background: #fffcf5;
+        color: var(--ink);
+        box-shadow: 0 2px 8px rgba(0,0,0,.1);
+      }
+      .clay-btn .chip {
+        width: 19px; height: 19px; border-radius: 50%;
+        border: 1px solid rgba(0,0,0,.18);
+        box-shadow: inset 0 -3px 5px rgba(0,0,0,.16);
+      }
+      .hint {
+        position: absolute;
+        top: 22px; right: 26px;
+        color: var(--muted);
+        font-size: 12px;
+        background: var(--glass);
+        border: 1px solid var(--line);
+        padding: 8px 13px;
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        user-select: none;
+      }
+      @media (max-width: 600px) {
+        .brand small, .hint { display: none; }
+        .clay-picker { bottom: 14px; }
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-BoyMp988.js"></script>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div class="post">
+      <div class="soft-vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <div class="ui-frame">
+      <div class="vignette"></div>
+      <div class="brand">
+        <span class="dot"></span>
+        <b>Render</b>
+        <small>глазурованная керамика</small>
+      </div>
+      <div class="hint">вращайте, чтобы рассмотреть</div>
+
+      <div class="clay-picker" id="clayPicker">
+        <button class="clay-btn active" data-clay="stone">
+          <span class="chip" style="background:#cbc2ad"></span>Серо-бежевая глина
+        </button>
+        <button class="clay-btn" data-clay="asphalt">
+          <span class="chip" style="background:#3c3d3d"></span>Асфальт
+        </button>
+      </div>
+    </div>
+
+  </body>
+</html>
