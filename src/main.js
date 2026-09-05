@@ -386,7 +386,7 @@ function loadCup(clay) {
         // Clear glaze darkens the clay roughly 2x — it must not become black
         // on light clay. Tint is derived per clay variant.
         const GLASS_TINT =
-          clay === "stone" ? new THREE.Color(0xa79f92) : new THREE.Color(0x3f4141);
+          clay === "stone" ? new THREE.Color(0xc6beaf) : new THREE.Color(0x3f4141);
         const glassMat = new THREE.MeshPhysicalMaterial({
           color: GLASS_TINT,
           transmission: 0.55,
@@ -426,7 +426,7 @@ function loadCup(clay) {
           // The interior floor should stay calmer: glaze covers it, but with
           // weaker clearcoat/environment response so it does not act as a mirror.
           const floorGlassMat = glassMat.clone();
-          floorGlassMat.color = clay === "stone" ? new THREE.Color(0xa79f92) : new THREE.Color(0x3f4141);
+          floorGlassMat.color = clay === "stone" ? new THREE.Color(0xc6beaf) : new THREE.Color(0x3f4141);
           floorGlassMat.transmission = 0.42;
           floorGlassMat.roughness = 0.3;
           floorGlassMat.clearcoat = 0.4;
