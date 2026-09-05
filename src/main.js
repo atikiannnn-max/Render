@@ -318,7 +318,7 @@ function loadCup(clay) {
         // Clear glaze darkens the clay roughly 2x — it must not become black
         // on light clay. Tint is derived per clay variant.
         const GLASS_TINT =
-          clay === "stone" ? new THREE.Color(0x807a6e) : new THREE.Color(0x3b3d3d);
+          clay === "stone" ? new THREE.Color(0xa79f92) : new THREE.Color(0x3f4141);
         const glassMat = new THREE.MeshPhysicalMaterial({
           color: GLASS_TINT,
           transmission: 0.55,
@@ -348,7 +348,16 @@ function loadCup(clay) {
           root.add(shell);
         }
         if (floor) {
-          const shell = new THREE.Mesh(offsetUpward(floor.geometry, 0.0003), glassMat.clone());
+          // The interior floor should stay calmer: glaze covers it, but with
+          // weaker clearcoat/environment response so it does not act as a mirror.
+          const floorGlassMat = glassMat.clone();
+          floorGlassMat.color = clay === "stone" ? new THREE.Color(0xa79f92) : new THREE.Color(0x3f4141);
+          floorGlassMat.transmission = 0.42;
+          floorGlassMat.roughness = 0.3;
+          floorGlassMat.clearcoat = 0.4;
+          floorGlassMat.clearcoatRoughness = 0.25;
+          floorGlassMat.envMapIntensity = 0.2;
+          const shell = new THREE.Mesh(offsetUpward(floor.geometry, 0.0003), floorGlassMat);
           shell.name = "glaze-shell-floor";
           root.add(shell);
         }
