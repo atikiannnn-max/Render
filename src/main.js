@@ -53,31 +53,19 @@ pmrem.dispose();
  * Studio lighting, not a single source:
  *  - very large key softbox above-left/front, roughly 3x the cup;
  *  - broad cool fill right/front, 25-40% of key;
- *  - weak top/back source only to separate the rim from the backdrop.
- * Area lights do not cast shadows in three.js, so one very soft, low-intensity
- * directional "shadow carrier" follows the key light position. It is a
- * technical shadow source, not a visible key.
+ *  - weak overhead source for the rim/interior.
+ *
+ * Area lights cannot cast shadow maps in three.js, so each large source gets a
+ * low-intensity directional "shadow carrier" with a big PCF radius. Several
+ * overlapping carriers produce the blurred, softbox-like penumbra instead of a
+ * single hard shadow.
  */
 RectAreaLightUniformsLib.init();
-
-const shadowCarrier = new THREE.DirectionalLight(0xfffbf4, 0.55);
-shadowCarrier.position.set(-300, 330, 170);
-shadowCarrier.castShadow = true;
-shadowCarrier.shadow.mapSize.set(2048, 2048);
-shadowCarrier.shadow.camera.near = 10;
-shadowCarrier.shadow.camera.far = 800;
-shadowCarrier.shadow.camera.left = -220;
-shadowCarrier.shadow.camera.right = 220;
-shadowCarrier.shadow.camera.top = 220;
-shadowCarrier.shadow.camera.bottom = -220;
-shadowCarrier.shadow.bias = -0.0002;
-shadowCarrier.shadow.radius = 16;
-scene.add(shadowCarrier);
 
 const studioLights = [
   {
     color: 0xfff8ef,
-    intensity: 3.0,
+    intensity: 2.8,
     width: 560,
     height: 420,
     position: [-300, 330, 170],
@@ -85,7 +73,7 @@ const studioLights = [
   },
   {
     color: 0xf4f6f8,
-    intensity: 0.95,
+    intensity: 0.8,
     width: 460,
     height: 320,
     position: [300, 190, 310],
@@ -93,19 +81,11 @@ const studioLights = [
   },
   {
     color: 0xffffff,
-    intensity: 0.14,
+    intensity: 0.16,
     width: 700,
     height: 260,
     position: [0, 420, 80],
     label: "overhead-softbox",
-  },
-  {
-    color: 0xffffff,
-    intensity: 0.3,
-    width: 500,
-    height: 360,
-    position: [60, 300, -350],
-    label: "rim-softbox",
   },
 ];
 
@@ -115,6 +95,27 @@ for (const cfg of studioLights) {
   light.lookAt(0, 34, 0);
   light.name = cfg.label;
   scene.add(light);
+}
+
+const carrierConfigs = [
+  { color: 0xfffaf2, intensity: 0.3, size: 2048, radius: 20, position: [-300, 330, 170] },
+  { color: 0xf8fafb, intensity: 0.12, size: 1024, radius: 24, position: [300, 190, 310] },
+  { color: 0xffffff, intensity: 0.05, size: 1024, radius: 28, position: [0, 420, 80] },
+];
+for (const c of carrierConfigs) {
+  const dir = new THREE.DirectionalLight(c.color, c.intensity);
+  dir.position.set(...c.position);
+  dir.castShadow = true;
+  dir.shadow.mapSize.set(c.size, c.size);
+  dir.shadow.camera.near = 10;
+  dir.shadow.camera.far = 900;
+  dir.shadow.camera.left = -240;
+  dir.shadow.camera.right = 240;
+  dir.shadow.camera.top = 240;
+  dir.shadow.camera.bottom = -240;
+  dir.shadow.bias = -0.00015;
+  dir.shadow.radius = c.radius;
+  scene.add(dir);
 }
 
 const cupGroup = new THREE.Group();
@@ -134,11 +135,11 @@ const cycloramaMat = new THREE.MeshStandardMaterial({
 function buildCyclorama() {
   // Cross-section (Y,Z): floor -> 90° fillet -> back wall, all one surface.
   const floorFront = 1600;
-  const cornerStart = -1700;
-  const wallZ = -2000;
+  const cornerStart = -1050;
+  const wallZ = -1350;
   const filletR = 300;
-  const wallTop = 1500;
-  const halfWidth = 2100;
+  const wallTop = 1700;
+  const halfWidth = 2300;
   const xSegs = 5;
   const pts = [];
 
@@ -175,7 +176,9 @@ function buildCyclorama() {
     const t = i / filletSegs;
     ptFactor[floorCount + i - 1] = 0.52 + 0.3 * t;
   }
-  for (let i = 0; i < wallSegs; i++) ptFactor[wallStart + i] = 0.94;
+  for (let i = 0; i < wallSegs; i++) {
+    ptFactor[wallStart + i] = 0.82 + 0.12 * (i / Math.max(1, wallSegs - 1));
+  }
   for (let xi = 0; xi <= xSegs; xi++) {
     const x = -halfWidth + (2 * halfWidth * xi) / xSegs;
     for (let pi = 0; pi < pts.length; pi++) {
