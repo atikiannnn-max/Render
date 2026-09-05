@@ -97,7 +97,7 @@ for (const cfg of studioLights) {
   scene.add(light);
 }
 
-const shadowCarrier = new THREE.DirectionalLight(0xfffaf2, 0.55);
+const shadowCarrier = new THREE.DirectionalLight(0xfffaf2, 0.45);
 shadowCarrier.position.set(-300, 330, 170);
 shadowCarrier.castShadow = true;
 shadowCarrier.shadow.mapSize.set(2048, 2048);
@@ -111,7 +111,27 @@ shadowCarrier.shadow.bias = -0.00008;
 shadowCarrier.shadow.normalBias = 0.02;
 shadowCarrier.shadow.radius = 8;
 shadowCarrier.shadow.blurSamples = 16;
+shadowCarrier.shadow.intensity = 1.25; // ~20% darker than before
 scene.add(shadowCarrier);
+
+// A narrower, less blurred carrier from the same direction gives the natural
+// "darker under the object, lighter farther away" gradient.
+const contactCarrier = new THREE.DirectionalLight(0xfff8ee, 0.12);
+contactCarrier.position.set(-300, 330, 170);
+contactCarrier.castShadow = true;
+contactCarrier.shadow.mapSize.set(2048, 2048);
+contactCarrier.shadow.camera.near = 10;
+contactCarrier.shadow.camera.far = 900;
+contactCarrier.shadow.camera.left = -110;
+contactCarrier.shadow.camera.right = 110;
+contactCarrier.shadow.camera.top = 110;
+contactCarrier.shadow.camera.bottom = -110;
+contactCarrier.shadow.bias = -0.00008;
+contactCarrier.shadow.normalBias = 0.02;
+contactCarrier.shadow.radius = 2.2;
+contactCarrier.shadow.blurSamples = 8;
+contactCarrier.shadow.intensity = 1.0;
+scene.add(contactCarrier);
 
 const cupGroup = new THREE.Group();
 cupGroup.scale.setScalar(1000); // GLB is metres; the studio works in millimetres.
