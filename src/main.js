@@ -277,6 +277,7 @@ function loadCup(clay) {
       const outer = byName["outer-wall"];
       const inner = byName["inner-wall"];
       const floor = byName["interior-floor"];
+      const rim = byName["rim-cap"];
 
       if (bodyMatSource) {
         // Remove baked clearcoat: glaze now lives in a real thin shell.
@@ -320,6 +321,13 @@ function loadCup(clay) {
         if (inner) {
           const shell = new THREE.Mesh(offsetRadiallyInward(inner.geometry, 0.0003), glassMat.clone());
           shell.name = "glaze-shell-inner";
+          root.add(shell);
+        }
+        if (rim) {
+          // The top edge of the cup is glazed too: a thin glass layer directly
+          // above the rim annulus.
+          const shell = new THREE.Mesh(offsetUpward(rim.geometry, 0.0003), glassMat.clone());
+          shell.name = "glaze-shell-rim";
           root.add(shell);
         }
         if (floor) {

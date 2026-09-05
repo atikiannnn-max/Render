@@ -200,8 +200,9 @@ def clamp255(v):
 
 def glaze_cover(u, y, H_):
     r = D / 2 * profile_radius(y / H_)
-    # Only the exterior relief is glazed. The outer wall itself stays raw clay.
-    return medallion_coverage(u * math.pi * 2, y, r)
+    # Glaze covers the exterior medallion and wraps ~1 mm over the top rim.
+    top = 1 if y > H_ - 1.0 else 0
+    return max(top, medallion_coverage(u * math.pi * 2, y, r))
 
 
 def build_body_textures(clay_id, out_dir):
