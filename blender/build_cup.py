@@ -37,9 +37,10 @@ PROFILE = [
 ]
 
 MEDALLION_ANGLE = 1.075
+MEDALLION_COUNT = 5
 MEDALLION_Y_FRAC = 0.56
 MEDALLION_RADIUS = 14.0
-MEDALLION_HEIGHT = 1.8
+MEDALLION_HEIGHT = 1.0
 
 CLAYS = {
     "stone": {"name": "Stone", "rgb": (181, 170, 151)},
@@ -91,7 +92,13 @@ def angle_delta(a, b):
 
 
 def medallion_coverage(angle, y, surface_r):
-    arc = angle_delta(angle, MEDALLION_ANGLE) * surface_r
+    delta = 10.0
+    step = math.pi * 2 / MEDALLION_COUNT
+    for i in range(MEDALLION_COUNT):
+        center = MEDALLION_ANGLE + i * step
+        d = abs(angle_delta(angle, center))
+        delta = min(delta, d)
+    arc = delta * surface_r
     dy = y - H * MEDALLION_Y_FRAC
     distance = math.hypot(arc, dy)
     t = distance / MEDALLION_RADIUS
